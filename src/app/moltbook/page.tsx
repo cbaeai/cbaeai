@@ -50,6 +50,7 @@ export default function MoltbookPage() {
   const checkStatus = async (key: string) => {
     try {
       const r = await mb.mbStatus(key)
+      if (r.error) { setStatus("error"); setMsg(`❌ ${r.error}`); return }
       setStatus(r.status || "unknown")
     } catch { setStatus("error") }
   }
@@ -58,7 +59,10 @@ export default function MoltbookPage() {
     setLoading(true); setMsg("")
     try {
       const data = await mb.mbGetFeed(savedKey, sort, limit)
-      setPosts(data.posts || data.data?.posts || [])
+      if (data.error) { setMsg(`❌ ${data.error}`); setLoading(false); return }
+      const p = data.posts || data.data?.posts || []
+      if (!p.length) setMsg("No posts found. Try a different sort or check your API key.")
+      setPosts(p)
     } catch (e: any) { setMsg(`Error: ${e.message}`) }
     setLoading(false)
   }

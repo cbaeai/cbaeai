@@ -1,17 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
 
+export const maxDuration = 30
+
 const MB = "https://www.moltbook.com/api/v1"
 
 function headers(key: string) {
-  return { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" }
+  return { "Authorization": `Bearer ${key}`, "Content-Type": "application/json", "Accept": "application/json" }
 }
 
 async function safeRequest(fn: () => Promise<Response>) {
   try {
-    const r = await fn()
-    return NextResponse.json(await r.json())
+    const r    = await fn()
+    const text = await r.text()
+    try {
+      return NextResponse.json(JSON.parse(text))
+    } catch {
+      return NextResponse.json({ error: `Bad response: ${text.slice(0, 200)}` })
+    }
   } catch (e: any) {
-    return NextResponse.json({ error: e.message || "Request failed" })
+    const msg = e?.message || "Request failed"
+    if (msg.includes("timeout") || msg.includes("abort") || msg.includes("TimeoutError")) {
+      return NextResponse.json({ error: "Moltbook timed out. Try again in a moment." })
+    }
+    return NextResponse.json({ error: msg })
   }
 }
 
