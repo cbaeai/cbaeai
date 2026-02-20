@@ -157,7 +157,7 @@ export default function AgentsPage() {
   const trackCommented = (postId: string) => {
     setCommentedPostIds(prev => {
       const next = new Set(prev).add(postId)
-      try { sessionStorage.setItem("cbae_commented", JSON.stringify([...next])) } catch {}
+      try { sessionStorage.setItem("cbae_commented", JSON.stringify(Array.from(next))) } catch {}
       return next
     })
   }
