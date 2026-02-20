@@ -41,8 +41,11 @@ export async function memorize(question: string, answer: string): Promise<void> 
     const vec   = await embed(question)
     if (!vec.length) return
     const index = getIndex()
+    // Use a stable hash of the question as ID so upserting the same fact
+    // overwrites the old record instead of creating duplicates
+    const stableId = Buffer.from(question.trim().toLowerCase().slice(0, 200)).toString("base64url").slice(0, 64)
     await index.upsert([{
-      id: crypto.randomUUID(),
+      id: stableId,
       values: vec,
       metadata: { q: question, answer: answer.slice(0, 600), type: "qa", ts: new Date().toISOString() }
     }])
