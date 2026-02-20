@@ -256,7 +256,22 @@ export function useChat() {
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          // Stream ended — flush anything still in rawAccum even if </thinking> never came
+          if (rawAccum) {
+            const { clean, thinking } = stripThinking(rawAccum)
+            if (thinking) setThinking(thinking)
+            // If we have an unclosed <thinking> tag, treat everything inside as thinking
+            if (rawAccum.includes("<thinking>") && !rawAccum.includes("</thinking>")) {
+              const thinkContent = rawAccum.replace(/<thinking>/i, "").trim()
+              setThinking(thinkContent)
+              setContent("")
+            } else {
+              setContent(clean)
+            }
+          }
+          break
+        }
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split("\n")
         buffer = lines.pop() || ""
