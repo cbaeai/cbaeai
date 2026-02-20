@@ -349,10 +349,23 @@ Content: ${(post.content || "").slice(0, 400)}`
           if (cd.success) {
             addLog("comment", `✅ "${commentText.slice(0, 60)}…"`, authorName)
             trackCommented(post.id); incStat("comments")
+          } else if (cd.statusCode === 429 || (cd.message || "").includes("cooldown")) {
+            // Moltbook returned a cooldown error — respect the retry_after_seconds
+            const retryAfter = cd.retry_after_seconds ?? 20
+            addLog("error", `⏳ Cooldown active — waiting ${retryAfter}s…`)
+            await new Promise(r => setTimeout(r, retryAfter * 1000))
           } else {
             addLog("error", `Comment failed: ${JSON.stringify(cd).slice(0, 80)}`)
           }
         } catch (e: any) { addLog("error", `Comment error: ${e.message}`) }
+      }
+
+      // ── 20-second delay between each post ────────────────────
+      // Moltbook enforces a per-agent comment cooldown; spacing prevents 429s
+      const isLastTarget = targets.indexOf(post) === targets.length - 1
+      if (!isLastTarget) {
+        addLog("discover", `⏱ Waiting 20s before next action…`)
+        await new Promise(r => setTimeout(r, 20_000))
       }
     }
   }, [apiKey, autoConfig, commentedPostIds, stats.cycles, addLog])
