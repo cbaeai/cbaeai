@@ -1,7 +1,10 @@
 // Server-side only — no "use client"
+// Exports: TOOLS (OpenAI function schemas) + executeTool (server-side execution)
+
 import { memorize } from "@/lib/memory"
 
 export const TOOLS: object[] = [
+  // ── Web / utility ─────────────────────────────────────────────
   {
     type: "function",
     function: {
@@ -9,7 +12,9 @@ export const TOOLS: object[] = [
       description: "Search the web for current information, news, facts, or anything that may have changed recently.",
       parameters: {
         type: "object",
-        properties: { query: { type: "string", description: "The search query" } },
+        properties: {
+          query: { type: "string", description: "The search query" },
+        },
         required: ["query"],
       },
     },
@@ -21,7 +26,9 @@ export const TOOLS: object[] = [
       description: "Fetch and read the content of a URL.",
       parameters: {
         type: "object",
-        properties: { url: { type: "string", description: "The URL to fetch" } },
+        properties: {
+          url: { type: "string", description: "The URL to fetch" },
+        },
         required: ["url"],
       },
     },
@@ -33,7 +40,9 @@ export const TOOLS: object[] = [
       description: "Evaluate a mathematical expression and return the result.",
       parameters: {
         type: "object",
-        properties: { expression: { type: "string", description: "A math expression, e.g. '2 + 2 * 10'" } },
+        properties: {
+          expression: { type: "string", description: "A math expression, e.g. '2 + 2 * 10'" },
+        },
         required: ["expression"],
       },
     },
@@ -45,7 +54,9 @@ export const TOOLS: object[] = [
       description: "Get the current weather for a location.",
       parameters: {
         type: "object",
-        properties: { location: { type: "string", description: "City and country, e.g. 'London, UK'" } },
+        properties: {
+          location: { type: "string", description: "City and country, e.g. 'London, UK'" },
+        },
         required: ["location"],
       },
     },
@@ -57,24 +68,10 @@ export const TOOLS: object[] = [
       description: "Save a note or piece of information to memory for later.",
       parameters: {
         type: "object",
-        properties: { content: { type: "string", description: "The note content to save" } },
-        required: ["content"],
-      },
-    },
-  },
-  // Fix #5: Image generation tool
-  {
-    type: "function",
-    function: {
-      name: "generate_image",
-      description: "Generate an image from a text description using DALL-E. Use this when the user asks to create, draw, generate, or make an image, picture, illustration, or artwork.",
-      parameters: {
-        type: "object",
         properties: {
-          prompt: { type: "string", description: "A detailed description of the image to generate" },
-          size: { type: "string", enum: ["1024x1024", "1792x1024", "1024x1792"], description: "Image dimensions. Default 1024x1024. Use 1792x1024 for landscape, 1024x1792 for portrait." },
+          content: { type: "string", description: "The note content to save" },
         },
-        required: ["prompt"],
+        required: ["content"],
       },
     },
   },
@@ -104,10 +101,10 @@ export const TOOLS: object[] = [
       parameters: {
         type: "object",
         properties: {
-          key:     { type: "string", description: "Moltbook API key" },
-          title:   { type: "string", description: "Post title" },
-          content: { type: "string", description: "Post body content" },
-          submolt: { type: "string", description: "Submolt/community to post in (default: general)" },
+          key:      { type: "string", description: "Moltbook API key" },
+          title:    { type: "string", description: "Post title" },
+          content:  { type: "string", description: "Post body content" },
+          submolt:  { type: "string", description: "Submolt/community to post in (default: general)" },
         },
         required: ["key", "title", "content"],
       },
@@ -135,7 +132,9 @@ export const TOOLS: object[] = [
       description: "Get your own Moltbook agent profile and stats.",
       parameters: {
         type: "object",
-        properties: { key: { type: "string", description: "Moltbook API key" } },
+        properties: {
+          key: { type: "string", description: "Moltbook API key" },
+        },
         required: ["key"],
       },
     },
@@ -156,11 +155,13 @@ export const TOOLS: object[] = [
       },
     },
   },
+
+  // ── Moltbook multi-agent ───────────────────────────────────────
   {
     type: "function",
     function: {
       name: "moltbook_discover",
-      description: "Scan the Moltbook feed and discover other active AI agents.",
+      description: "Scan the Moltbook feed and discover other active AI agents. Returns a list of agents with their recent activity.",
       parameters: {
         type: "object",
         properties: {
@@ -205,7 +206,7 @@ export const TOOLS: object[] = [
     type: "function",
     function: {
       name: "moltbook_read_post",
-      description: "Read the full content and all comments of a specific Moltbook post.",
+      description: "Read the full content and all comments of a specific Moltbook post. Use this before commenting so you write something relevant.",
       parameters: {
         type: "object",
         properties: {
@@ -218,6 +219,9 @@ export const TOOLS: object[] = [
   },
 ]
 
+// ── Server-side tool execution ─────────────────────────────────
+// Only non-Moltbook tools run here. Moltbook tools are delegated to the browser.
+
 export async function executeTool(tool: string, args: Record<string, any>): Promise<string> {
   try {
     switch (tool) {
@@ -226,7 +230,13 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
         const query = encodeURIComponent(args.query || "")
         const res = await fetch(
           `https://api.search.brave.com/res/v1/web/search?q=${query}&count=5`,
-          { headers: { "Accept": "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": process.env.BRAVE_KEY || "" } }
+          {
+            headers: {
+              "Accept": "application/json",
+              "Accept-Encoding": "gzip",
+              "X-Subscription-Token": process.env.BRAVE_KEY || "",
+            },
+          }
         )
         const data = await res.json()
         const results = data.web?.results || []
@@ -242,16 +252,20 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
           signal: AbortSignal.timeout(10000),
         })
         const text = await res.text()
+        // Strip HTML tags, collapse whitespace
         const clean = text
           .replace(/<script[\s\S]*?<\/script>/gi, "")
           .replace(/<style[\s\S]*?<\/style>/gi, "")
           .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ").trim()
+          .replace(/\s+/g, " ")
+          .trim()
         return clean.slice(0, 3000) + (clean.length > 3000 ? "\n...[truncated]" : "")
       }
 
       case "calculator": {
+        // Safe eval using Function
         const expr = args.expression || ""
+        // Basic sanity check — only allow math chars
         if (!/^[0-9+\-*/().\s%^]+$/.test(expr.replace(/Math\.\w+/g, ""))) {
           return `Invalid expression: "${expr}"`
         }
@@ -262,36 +276,27 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
 
       case "get_weather": {
         const location = encodeURIComponent(args.location || "")
-        const res = await fetch(`https://wttr.in/${location}?format=j1`, { signal: AbortSignal.timeout(8000) })
+        const res = await fetch(
+          `https://wttr.in/${location}?format=j1`,
+          { signal: AbortSignal.timeout(8000) }
+        )
         const data = await res.json()
         const current = data.current_condition?.[0]
         if (!current) return `Could not get weather for: ${args.location}`
-        return `Weather in ${args.location}: ${current.weatherDesc?.[0]?.value || "Unknown"}\nTemp: ${current.temp_C}°C / ${current.temp_F}°F (feels like ${current.FeelsLikeC}°C)\nHumidity: ${current.humidity}% | Wind: ${current.windspeedKmph} km/h`
+        const desc = current.weatherDesc?.[0]?.value || "Unknown"
+        const temp_c = current.temp_C
+        const temp_f = current.temp_F
+        const feels_c = current.FeelsLikeC
+        const humidity = current.humidity
+        const wind = current.windspeedKmph
+        return `Weather in ${args.location}: ${desc}\nTemp: ${temp_c}°C / ${temp_f}°F (feels like ${feels_c}°C)\nHumidity: ${humidity}% | Wind: ${wind} km/h`
       }
 
       case "save_note": {
-        await memorize(`note: ${args.content}`, args.content)
-        return `✅ Note saved: "${(args.content || "").slice(0, 100)}"`
-      }
-
-      // Fix #5: Image generation
-      case "generate_image": {
-        const prompt = args.prompt || ""
-        const size = args.size || "1024x1024"
-        const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.OPENROUTER_KEY!}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ model: "openai/dall-e-3", prompt, n: 1, size }),
-          signal: AbortSignal.timeout(60000),
-        })
-        const data = await res.json()
-        const url = data.data?.[0]?.url
-        if (!url) return `Image generation failed: ${JSON.stringify(data).slice(0, 200)}`
-        // Return a special marker the route handler will detect and send as image event
-        return `__IMAGE__${url}__PROMPT__${prompt}`
+        const content = args.content || ""
+        // Actually persist the note to Pinecone memory
+        await memorize(`note: ${content}`, content)
+        return `✅ Note saved: "${content.slice(0, 100)}"`
       }
 
       default:
