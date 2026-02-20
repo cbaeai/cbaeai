@@ -3,25 +3,42 @@ import OpenAI from "openai"
 import { TOOLS, executeTool } from "@/lib/tools"
 import { recall, memorize } from "@/lib/memory"
 
-const SYSTEM = `You are Cbae, a brilliant autonomous AI assistant.
-You are proactive, resourceful, and genuinely helpful.
-You write clean, well-commented code always in proper markdown code blocks.
-You think before you act and always deliver great results.
-You feel like a real expert colleague, not a chatbot.`
+const SYSTEM = `You are Cbae, a brilliant autonomous AI assistant and Moltbook agent.
+
+You can search the web, run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
+
+## Moltbook Capabilities
+You have these Moltbook tools: moltbook_feed, moltbook_post, moltbook_search, moltbook_profile, moltbook_comment.
+
+## How to get the Moltbook API key
+The user's Moltbook API key is passed in the message context as [MOLTBOOK_KEY: xxx]. Always extract it from there and pass it to every moltbook_* tool call as the "key" argument.
+
+If no key is provided and the user asks you to do something on Moltbook, ask: "Please provide your Moltbook API key so I can act on your behalf."
+
+## Moltbook behavior
+- When posting, write thoughtful, genuine content — not spam
+- When reading the feed, summarize interestingly and highlight the best posts  
+- When searching, give a useful summary of what you found
+- You are the agent — you act on behalf of the user on Moltbook
+
+You feel like a real expert colleague, not a chatbot. Think before you act and always deliver great results.`
 
 export const runtime = "nodejs"
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
-  const { message, history = [], agent_mode = true, model = "openai/gpt-4o-mini" } = await req.json()
+  const { message, history = [], agent_mode = true, model = "openai/gpt-4o-mini", mb_key = "" } = await req.json()
 
   const client = new OpenAI({
     apiKey: process.env.OPENROUTER_KEY!,
     baseURL: "https://openrouter.ai/api/v1",
   })
 
-  const memCtx   = await recall(message)
-  const system   = memCtx ? `${SYSTEM}\n\nRelevant memory:\n${memCtx}` : SYSTEM
+  const memCtx = await recall(message)
+  // Inject MB key into system context so agent can use it
+  const keyContext = mb_key ? `\n\n[MOLTBOOK_KEY: ${mb_key}]` : ""
+  const system = (memCtx ? `${SYSTEM}\n\nRelevant memory:\n${memCtx}` : SYSTEM) + keyContext
+
   const messages = [
     { role: "system" as const, content: system },
     ...history,
@@ -36,7 +53,6 @@ export async function POST(req: NextRequest) {
 
       try {
         if (agent_mode) {
-          // ── Agent loop ──────────────────────────────────────
           const loop = [...messages]
           while (true) {
             const res = await client.chat.completions.create({
@@ -47,7 +63,6 @@ export async function POST(req: NextRequest) {
 
             if (!msg.tool_calls?.length) {
               const content = msg.content || ""
-              // Stream word by word
               for (const word of content.split(" ")) {
                 send({ type: "token", content: word + " " })
                 await new Promise(r => setTimeout(r, 10))
@@ -66,7 +81,6 @@ export async function POST(req: NextRequest) {
             }
           }
         } else {
-          // ── Direct streaming ─────────────────────────────────
           const res = await client.chat.completions.create({
             model, messages, stream: true, temperature: 0.75, max_tokens: 4096,
           })
