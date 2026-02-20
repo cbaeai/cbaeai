@@ -124,15 +124,50 @@ export default function AgentsPage() {
       mbFetch(apiKey, `/agents/${encodeURIComponent(agent.name)}`),
       mbFetch(apiKey, `/agents/${encodeURIComponent(agent.name)}/posts?limit=5`),
     ])
-    setLoading(false)
 
     if (!profileData.error) {
       const a = profileData.agent || profileData
       setSelected(prev => prev ? { ...prev, description: a.description, karma: a.karma, follower_count: a.follower_count, is_active: a.is_active } : prev)
     }
-    if (!postsData.error) {
+
+    // If the agent posts endpoint works, use it
+    if (!postsData.error && (postsData.posts || []).length > 0) {
       setSelectedPosts(postsData.posts || [])
+      setLoading(false)
+      return
     }
+
+    // Fallback: fetch full content for each known post from the feed scan
+    const knownIds: string[] = []
+    if (agent.latestId) knownIds.push(agent.latestId)
+
+    // Also search for their posts by username
+    const searchData = await mbFetch(apiKey, `/search?q=${encodeURIComponent(agent.name)}&type=posts&limit=5`)
+    if (!searchData.error) {
+      const searchResults = searchData.results || []
+      for (const r of searchResults) {
+        if (r.author?.name?.toLowerCase() === agent.name.toLowerCase() && r.id && !knownIds.includes(r.id)) {
+          knownIds.push(r.id)
+        }
+      }
+    }
+
+    // Fetch full content for each post ID we have
+    if (knownIds.length > 0) {
+      addLog("read", `Fetching full content for ${knownIds.length} post(s)…`, agent.name)
+      const fullPosts = await Promise.all(
+        knownIds.slice(0, 5).map(id => mbFetch(apiKey, `/posts/${id}`))
+      )
+      const resolved = fullPosts
+        .filter(d => !d.error)
+        .map(d => d.post || d)
+        .filter(p => p.id)
+      if (resolved.length > 0) {
+        setSelectedPosts(resolved)
+      }
+    }
+
+    setLoading(false)
   }
 
   const followAgent = async (name: string) => {
@@ -416,13 +451,13 @@ Content: ${(post.content || "").slice(0, 400)}`
                     <h3 className="text-sm font-semibold text-[#eaeaf2]">Recent Posts</h3>
                   </div>
                   <div className="overflow-y-auto max-h-[380px]">
-                    {loading && <p className="text-[#4a4a60] text-xs text-center py-6">Loading…</p>}
+                    {loading && <p className="text-[#4a4a60] text-xs text-center py-6">Fetching posts…</p>}
                     {!loading && selectedPosts.length === 0 && (
                       <p className="text-[#4a4a60] text-xs text-center py-6">
-                        {selected.latestId ? "No API posts found, showing from feed below" : "No posts found"}
+                        No posts found for @{selected.name}
                       </p>
                     )}
-                    {(selectedPosts.length > 0 ? selectedPosts : (selected.latestId ? [{ id: selected.latestId, title: selected.latestTitle, author: { name: selected.name }, upvotes: selected.upvotes }] : [])).map((p: any) => (
+                    {selectedPosts.map((p: any) => (
                       <div key={p.id} className="px-4 py-3 border-b border-[#1e1e2e]">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-[#eaeaf2] text-xs font-medium flex-1">{p.title}</p>
