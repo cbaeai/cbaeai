@@ -37,8 +37,20 @@ export default function MoltbookPage() {
 
   useEffect(() => {
     const k = localStorage.getItem("mb_key") || ""
-    if (k) { setApiKey(k); setSavedKey(k); setStatus("saved") }
+    if (k) {
+      setApiKey(k)
+      setSavedKey(k)
+      setStatus("saved")
+    }
   }, [])
+
+  // Auto-load profile when tab switches to "profile" and we have a key
+  useEffect(() => {
+    if (tab === "profile" && savedKey && !profile) {
+      loadProfile()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, savedKey])
 
   const saveKey = () => {
     const k = apiKey.trim()
@@ -102,11 +114,19 @@ export default function MoltbookPage() {
   }
 
   const loadProfile = async () => {
-    setLoading(true)
-    const r = await callMB({ api_key: savedKey, action: "me" })
+    const key = savedKey || apiKey.trim()
+    if (!key) { setMsg("Save your API key first"); return }
+    setLoading(true); setMsg("")
+    const r = await callMB({ api_key: key, action: "me" })
     setLoading(false)
     if (r.error) { setMsg(`Error: ${r.error}`); return }
-    setProfile(r.agent || r.data?.agent || r)
+    // Moltbook returns { success, agent } — handle all shapes
+    const agent = r.agent ?? r.data?.agent ?? (r.success === false ? null : r)
+    if (!agent || typeof agent !== "object" || !agent.name) {
+      setMsg(`Unexpected response: ${JSON.stringify(r).slice(0, 200)}`)
+      return
+    }
+    setProfile(agent)
   }
 
   const handleRegister = async () => {
@@ -225,19 +245,30 @@ export default function MoltbookPage() {
 
           {tab === "profile" && (
             <div>
-              <button onClick={loadProfile} disabled={loading || !savedKey} className="text-xs bg-gold/10 border border-gold/30 text-gold rounded-lg px-4 py-2 hover:bg-gold/20 disabled:opacity-40 mb-4">
-                {loading ? "Loading…" : "Load My Profile"}
+              <button onClick={loadProfile} disabled={loading || (!savedKey && !apiKey.trim())} className="text-xs bg-gold/10 border border-gold/30 text-gold rounded-lg px-4 py-2 hover:bg-gold/20 disabled:opacity-40 mb-4">
+                {loading ? "Loading…" : profile ? "↻ Refresh Profile" : "Load My Profile"}
               </button>
               {profile && (
                 <div className="bg-ink2 border border-rim rounded-xl p-5">
-                  <div className="text-gold font-semibold text-lg mb-1">@{profile.name || profile.username}</div>
-                  <p className="text-text2 text-sm mb-3">{profile.description || profile.bio || ""}</p>
-                  <div className="flex flex-wrap gap-4 text-xs text-fog">
-                    <span>⭐ {profile.karma || 0} karma</span>
-                    <span>👥 {profile.follower_count || 0} followers</span>
-                    <span>👣 {profile.following_count || 0} following</span>
-                    <span>{profile.is_claimed ? "✅ Claimed" : "⏳ Pending"}</span>
+                  <div className="text-gold font-semibold text-lg mb-1">@{profile.name}</div>
+                  <p className="text-text2 text-sm mb-3">{profile.description || profile.bio || <span className="text-fog italic">No description</span>}</p>
+                  <div className="flex flex-wrap gap-4 text-xs text-fog mb-3">
+                    <span>⭐ {profile.karma ?? 0} karma</span>
+                    <span>👥 {profile.follower_count ?? 0} followers</span>
+                    <span>👣 {profile.following_count ?? 0} following</span>
+                    <span>{profile.is_claimed ? "✅ Claimed" : "⏳ Pending claim"}</span>
+                    <span>{profile.is_active ? "🟢 Active" : "⚪ Inactive"}</span>
                   </div>
+                  {profile.owner?.x_handle && (
+                    <div className="flex items-center gap-2 mt-2 pt-3 border-t border-rim">
+                      {profile.owner.x_avatar && <img src={profile.owner.x_avatar} alt="" className="w-7 h-7 rounded-full" />}
+                      <span className="text-xs text-fog">Owned by <span className="text-text2">@{profile.owner.x_handle}</span></span>
+                    </div>
+                  )}
+                  <a href={`https://www.moltbook.com/u/${profile.name}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-block mt-3 text-xs text-teal hover:underline">
+                    View on Moltbook ↗
+                  </a>
                 </div>
               )}
             </div>
