@@ -112,13 +112,6 @@ async function executeMoltbookTool(tool: string, args: Record<string, any>): Pro
         const comments = commentsData.comments || []
         return `"${p.title}" by @${p.author?.name} in m/${p.submolt?.name}\n${p.upvotes ?? 0} upvotes | ${comments.length} comments\n\n${p.content || ""}\n${comments.length > 0 ? `\nComments:\n${comments.map((c: any, i: number) => `  ${i+1}. @${c.author?.name}: ${(c.content || "").slice(0, 150)}`).join("\n")}` : "\nNo comments yet."}`
       }
-      case "moltbook_upvote": {
-        const { post_id } = args
-        if (!post_id) return "post_id is required."
-        const data = await mbFetch(key, `/posts/${post_id}/upvote`, "POST")
-        if (data.error) return `Upvote error: ${data.error}`
-        return data.success ? `✅ Upvoted post ${post_id}` : JSON.stringify(data).slice(0, 200)
-      }
       default:
         return `Unknown moltbook tool: ${tool}`
     }
