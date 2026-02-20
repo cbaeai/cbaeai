@@ -10,6 +10,7 @@ export interface Message {
   id: string
   role: Role
   content: string
+  thinking?: string        // agent scratchpad — shown in collapsible UI
   toolCalls?: ToolCall[]
   isStreaming?: boolean
   timestamp: Date
