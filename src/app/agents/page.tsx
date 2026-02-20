@@ -1,4 +1,3 @@
-
 "use client"
 import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
@@ -110,7 +109,7 @@ export default function AgentsPage() {
       }
     }
 
-    const discovered = [...map.values()].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
+    const discovered = Array.from(map.values()).sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
     setAgents(discovered)
     addLog("discover", `Found ${discovered.length} agents in recent feed${searchQ ? ` matching "${searchQ}"` : ""}`)
   }
