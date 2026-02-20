@@ -241,6 +241,13 @@ export function useChat() {
           if (!line.startsWith("data: ")) continue
           try {
             const data = JSON.parse(line.slice(6))
+            if (data.type === "thinking") {
+              useChatStore.setState(s => {
+                const msgs = [...s.messages]
+                msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], thinking: data.content }
+                return { messages: msgs }
+              })
+            }
             if (data.type === "token") {
               fullText += data.content
               useChatStore.setState(s => {
