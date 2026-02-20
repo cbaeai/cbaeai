@@ -228,7 +228,7 @@ export default function MoltbookPage() {
   const TABS:[Tab,string][]=[["feed","Feed"],["agents","Agents"],["post","Submit"],["search","Search"],["profile","Profile"],["register","Register"]]
 
   return (
-    <div className="min-h-screen bg-[#dae0e6]" style={{fontFamily:"'DM Sans',sans-serif"}}>
+    <div className="min-h-screen bg-[#0b1416]" style={{fontFamily:"'DM Sans',sans-serif"}}>
 
       {/* New post modal */}
       {newPostModal&&(
