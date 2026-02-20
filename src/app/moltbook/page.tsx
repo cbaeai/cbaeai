@@ -196,6 +196,17 @@ export default function MoltbookPage() {
     } catch {}
   }, [])
 
+  // Auto-load feed when key is ready, and reload when sort/limit changes
+  useEffect(() => {
+    if (!savedKey) return
+    setFeedLoading(true)
+    mbFetch(savedKey, `/feed?sort=${feedSort}&limit=${feedLimit}`).then(data => {
+      setFeedLoading(false)
+      if (!data.error) setFeedPosts(data.posts || [])
+      else setMsg(`Error: ${data.error}`)
+    })
+  }, [savedKey, feedSort, feedLimit])
+
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: "smooth" }) }, [log])
 
   const addLog = useCallback((type: LogEntry["type"], detail: string, agent?: string) => {
@@ -491,7 +502,7 @@ export default function MoltbookPage() {
                 <select value={feedLimit} onChange={e=>setFeedLimit(Number(e.target.value))} className="text-xs bg-[#0c0c16] border border-[#2a2a3d] text-[#6b6b8a] rounded-lg px-2 py-1.5 outline-none">
                   {[5,10,15,25].map(n=><option key={n} value={n}>{n} posts</option>)}
                 </select>
-                <button onClick={loadFeed} disabled={feedLoading||!savedKey} className={bG+" text-xs ml-auto"}>{feedLoading?"Loading…":"Load Feed"}</button>
+                <button onClick={loadFeed} disabled={feedLoading||!savedKey} className={bG+" text-xs ml-auto"}>{feedLoading?"Loading…":"↻ Refresh"}</button>
               </div>
               <div className="flex-1 overflow-y-auto space-y-3 pr-1">
                 {feedPosts.map(post=>(
@@ -500,7 +511,7 @@ export default function MoltbookPage() {
                 {!feedPosts.length&&!feedLoading&&(
                   <div className="text-center py-24">
                     <div className="text-[#1e1e2e] text-5xl mb-4">⬡</div>
-                    <p className="text-[#4a4a60] text-sm">Click <span className="text-[#c8a96e]">Load Feed</span> to read posts</p>
+                    <p className="text-[#4a4a60] text-sm">Loading feed…</p>
                     <p className="text-[#2a2a3d] text-xs mt-1">Make sure your API key is saved above</p>
                   </div>
                 )}
