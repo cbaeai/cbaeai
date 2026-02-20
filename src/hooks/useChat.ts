@@ -230,55 +230,33 @@ export function useChat() {
       const decoder = new TextDecoder()
       let buffer = "", fullText = ""
 
-      // Client-side safety net: strip <thinking>...</thinking> from token stream
-      // in case the server leaks them (e.g. model ignores instruction)
-      let tokenBuf = ""
-      let inThink = false
-      let thinkBuf = ""
+      // Client-side safety net: intercept <thinking>...</thinking> tags
+      // that may leak through if the model ignores server-side stripping
+      let rawAccum = ""   // accumulates all tokens to do a final clean pass
 
       const setThinking = (t: string) => useChatStore.setState(s => {
         const msgs = [...s.messages]; msgs[msgs.length-1] = {...msgs[msgs.length-1], thinking: t}; return {messages: msgs}
       })
-      const setContent = (t: string) => useChatStore.setState(s => {
-        const msgs = [...s.messages]; msgs[msgs.length-1] = {...msgs[msgs.length-1], content: t}; return {messages: msgs}
-      })
+      const setContent = (t: string) => {
+        fullText = t
+        useChatStore.setState(s => {
+          const msgs = [...s.messages]; msgs[msgs.length-1] = {...msgs[msgs.length-1], content: t}; return {messages: msgs}
+        })
+      }
 
-      const processTokenBuf = (force = false) => {
-        let text = tokenBuf
-        // detect <thinking> opening
-        if (!inThink) {
-          const openIdx = text.indexOf("<thinking>")
-          if (openIdx !== -1) {
-            const before = text.slice(0, openIdx)
-            if (before) { fullText += before; setContent(fullText) }
-            text = text.slice(openIdx + "<thinking>".length)
-            inThink = true; thinkBuf = ""; tokenBuf = text
-          }
-        }
-        if (inThink) {
-          const closeIdx = text.indexOf("</thinking>")
-          if (closeIdx !== -1) {
-            thinkBuf += text.slice(0, closeIdx)
-            setThinking(thinkBuf.trim())
-            inThink = false; thinkBuf = ""
-            tokenBuf = text.slice(closeIdx + "</thinking>".length).replace(/^\s+/, "")
-            processTokenBuf(force) // handle remainder
-          } else {
-            thinkBuf += text; tokenBuf = ""
-          }
-          return
-        }
-        // flush safe portion (keep 15 chars buffer to catch partial tags unless forced)
-        const safeLen = force ? text.length : Math.max(0, text.length - 15)
-        if (safeLen > 0) {
-          fullText += text.slice(0, safeLen); setContent(fullText)
-          tokenBuf = text.slice(safeLen)
-        }
+      // Strips <thinking>...</thinking> from a string, extracts thinking content
+      const stripThinking = (text: string): { clean: string; thinking: string } => {
+        let thinking = ""
+        const clean = text.replace(/<thinking>([\s\S]*?)<\/thinking>/gi, (_, inner) => {
+          thinking = inner.trim()
+          return ""
+        }).trimStart()
+        return { clean, thinking }
       }
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) { processTokenBuf(true); break }
+        if (done) break
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split("\n")
         buffer = lines.pop() || ""
@@ -291,8 +269,16 @@ export function useChat() {
               setThinking(data.content)
             }
             if (data.type === "token") {
-              tokenBuf += data.content
-              processTokenBuf()
+              rawAccum += data.content
+              // Only render once we have a complete thinking block or no thinking tag at all
+              const hasOpenTag = rawAccum.includes("<thinking>")
+              const hasCloseTag = rawAccum.includes("</thinking>")
+              if (!hasOpenTag || (hasOpenTag && hasCloseTag)) {
+                const { clean, thinking } = stripThinking(rawAccum)
+                if (thinking) setThinking(thinking)
+                setContent(clean)
+              }
+              // If we have <thinking> but no closing tag yet — wait, don't render
             }
             if (data.type === "tool_call") appendToolCall({ tool: data.tool, args: data.args })
             if (data.type === "tool_result") {
