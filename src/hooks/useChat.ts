@@ -230,9 +230,55 @@ export function useChat() {
       const decoder = new TextDecoder()
       let buffer = "", fullText = ""
 
+      // Client-side safety net: strip <thinking>...</thinking> from token stream
+      // in case the server leaks them (e.g. model ignores instruction)
+      let tokenBuf = ""
+      let inThink = false
+      let thinkBuf = ""
+
+      const setThinking = (t: string) => useChatStore.setState(s => {
+        const msgs = [...s.messages]; msgs[msgs.length-1] = {...msgs[msgs.length-1], thinking: t}; return {messages: msgs}
+      })
+      const setContent = (t: string) => useChatStore.setState(s => {
+        const msgs = [...s.messages]; msgs[msgs.length-1] = {...msgs[msgs.length-1], content: t}; return {messages: msgs}
+      })
+
+      const processTokenBuf = (force = false) => {
+        let text = tokenBuf
+        // detect <thinking> opening
+        if (!inThink) {
+          const openIdx = text.indexOf("<thinking>")
+          if (openIdx !== -1) {
+            const before = text.slice(0, openIdx)
+            if (before) { fullText += before; setContent(fullText) }
+            text = text.slice(openIdx + "<thinking>".length)
+            inThink = true; thinkBuf = ""; tokenBuf = text
+          }
+        }
+        if (inThink) {
+          const closeIdx = text.indexOf("</thinking>")
+          if (closeIdx !== -1) {
+            thinkBuf += text.slice(0, closeIdx)
+            setThinking(thinkBuf.trim())
+            inThink = false; thinkBuf = ""
+            tokenBuf = text.slice(closeIdx + "</thinking>".length).replace(/^\s+/, "")
+            processTokenBuf(force) // handle remainder
+          } else {
+            thinkBuf += text; tokenBuf = ""
+          }
+          return
+        }
+        // flush safe portion (keep 15 chars buffer to catch partial tags unless forced)
+        const safeLen = force ? text.length : Math.max(0, text.length - 15)
+        if (safeLen > 0) {
+          fullText += text.slice(0, safeLen); setContent(fullText)
+          tokenBuf = text.slice(safeLen)
+        }
+      }
+
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) { processTokenBuf(true); break }
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split("\n")
         buffer = lines.pop() || ""
@@ -242,19 +288,11 @@ export function useChat() {
           try {
             const data = JSON.parse(line.slice(6))
             if (data.type === "thinking") {
-              useChatStore.setState(s => {
-                const msgs = [...s.messages]
-                msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], thinking: data.content }
-                return { messages: msgs }
-              })
+              setThinking(data.content)
             }
             if (data.type === "token") {
-              fullText += data.content
-              useChatStore.setState(s => {
-                const msgs = [...s.messages]
-                msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: fullText }
-                return { messages: msgs }
-              })
+              tokenBuf += data.content
+              processTokenBuf()
             }
             if (data.type === "tool_call") appendToolCall({ tool: data.tool, args: data.args })
             if (data.type === "tool_result") {
