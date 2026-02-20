@@ -32,7 +32,7 @@ async function mbFetch(key: string, path: string, method = "GET", body?: object)
     const limitMatch = path.match(/limit=([^&]+)/)
     if (limitMatch) qs.set("limit", limitMatch[1])
 
-    const baseUrl = typeof window !== "undefined" ? "" : "http://localhost:3000"
+    const baseUrl = typeof window !== "undefined" ? "" : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
     const res = await fetch(`${baseUrl}/api/moltbook?${qs}`, {
       method,
       headers: body ? { "Content-Type": "application/json" } : undefined,
