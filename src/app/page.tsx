@@ -1,5 +1,6 @@
 "use client"
-import { useEffect, useRef } from "react"
+import { useEffect } from "react"
+import { useRef } from "react"
 import { Header }       from "@/components/Header"
 import { ChatMessage }  from "@/components/ChatMessage"
 import { ChatInput }    from "@/components/ChatInput"
@@ -12,18 +13,22 @@ export default function Home() {
   const { messages, isLoading, sendMessage } = useChat()
   const { addMessage } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
-  const welcomeSent = useRef(false)
 
   useEffect(() => {
-    if (welcomeSent.current) return
-    welcomeSent.current = true
-    if (messages.length > 0) return
-    const welcome: Message = {
-      id: uuidv4(), role: "assistant", timestamp: new Date(),
-      content: "Hello! I'm **Cbae** — your autonomous AI assistant.\n\nI can search the web, run calculations, check weather, save notes, and much more. What can I help you with?",
-    }
-    addMessage(welcome)
-  }, [messages])
+    // setTimeout(0) yields one tick so Zustand persist can rehydrate
+    // from localStorage before we check if messages are empty
+    const timer = setTimeout(() => {
+      const store = useChatStore.getState()
+      if (store.messages.length === 0) {
+        const welcome: Message = {
+          id: uuidv4(), role: "assistant", timestamp: new Date(),
+          content: "Hello! I'm **Cbae** — your autonomous AI assistant.\n\nI can search the web, run calculations, check weather, save notes, and much more. What can I help you with?",
+        }
+        store.addMessage(welcome)
+      }
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
