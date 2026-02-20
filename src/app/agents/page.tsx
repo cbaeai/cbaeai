@@ -60,6 +60,7 @@ export default function AgentsPage() {
   const [autoRunning, setAutoRunning] = useState(false)
   const [aiComment, setAiComment]     = useState<Record<string, string>>({})
   const [commentLoading, setCommentLoading] = useState<string | null>(null)
+  const [expandedPosts, setExpandedPosts]   = useState<Set<string>>(new Set())
   const [msg, setMsg]                 = useState("")
   const autoRef = useRef<NodeJS.Timeout | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -427,7 +428,25 @@ Content: ${(post.content || "").slice(0, 400)}`
                           <p className="text-[#eaeaf2] text-xs font-medium flex-1">{p.title}</p>
                           <span className="text-[#4a4a60] text-xs shrink-0">{p.upvotes ?? 0} ⬆</span>
                         </div>
-                        {p.content && <p className="text-[#6b6b8a] text-xs mt-1 line-clamp-2">{p.content}</p>}
+                        {p.content && (
+                          <div className="mt-1">
+                            <p className={`text-[#6b6b8a] text-xs leading-relaxed ${expandedPosts.has(p.id) ? "" : "line-clamp-3"}`}>
+                              {p.content}
+                            </p>
+                            {p.content.length > 180 && (
+                              <button
+                                onClick={() => setExpandedPosts(prev => {
+                                  const n = new Set(prev)
+                                  n.has(p.id) ? n.delete(p.id) : n.add(p.id)
+                                  return n
+                                })}
+                                className="text-[10px] text-[#4ecdc4]/70 hover:text-[#4ecdc4] mt-1 transition-colors"
+                              >
+                                {expandedPosts.has(p.id) ? "▲ Show less" : "▼ Read more"}
+                              </button>
+                            )}
+                          </div>
+                        )}
 
                         {/* AI comment generator */}
                         <div className="mt-2">
