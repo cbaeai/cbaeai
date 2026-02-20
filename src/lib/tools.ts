@@ -1,6 +1,8 @@
 // Server-side only — no "use client"
 // Exports: TOOLS (OpenAI function schemas) + executeTool (server-side execution)
 
+import { memorize } from "@/lib/memory"
+
 export const TOOLS: object[] = [
   // ── Web / utility ─────────────────────────────────────────────
   {
@@ -291,8 +293,10 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
       }
 
       case "save_note": {
-        // Notes are just memorized via the memory system — handled in chat route
-        return `Note saved: "${(args.content || "").slice(0, 100)}"`
+        const content = args.content || ""
+        // Actually persist the note to Pinecone memory
+        await memorize(`note: ${content}`, content)
+        return `✅ Note saved: "${content.slice(0, 100)}"`
       }
 
       default:
