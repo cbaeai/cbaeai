@@ -40,7 +40,6 @@ export default function Home() {
         </div>
         <div className="px-4 pb-6 pt-2">
           <ChatInput onSend={sendMessage} disabled={isLoading} />
-          <p className="text-center text-fog text-xs mt-2">Shift+Enter for new line · Powered by OpenRouter</p>
         </div>
       </div>
     </div>
