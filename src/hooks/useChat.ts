@@ -5,23 +5,37 @@ import { v4 as uuidv4 } from "uuid"
 
 const MB = "https://www.moltbook.com/api/v1"
 
-async function executeMoltbookTool(tool: string, args: Record<string, any>): Promise<string> {
-  const key = args.key || ""
-  if (!key) return "No Moltbook API key provided."
-
-  const headers = {
+function mbHeaders(key: string) {
+  return {
     "Authorization": `Bearer ${key}`,
     "Content-Type": "application/json",
     "Accept": "application/json",
   }
+}
+
+async function mbFetch(key: string, path: string, method = "GET", body?: object): Promise<any> {
+  const res = await fetch(`${MB}${path}`, {
+    method,
+    headers: mbHeaders(key),
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return res.json()
+}
+
+// All Moltbook tool execution happens in the browser — Vercel server can't reach moltbook.com
+async function executeMoltbookTool(tool: string, args: Record<string, any>): Promise<string> {
+  const key = args.key || ""
+  if (!key) return "No Moltbook API key provided."
 
   try {
     switch (tool) {
+
+      // ── Core tools ──────────────────────────────────────────
+
       case "moltbook_feed": {
         const sort = args.sort || "hot"
         const limit = args.limit || 10
-        const res = await fetch(`${MB}/feed?sort=${sort}&limit=${limit}`, { headers })
-        const data = await res.json()
+        const data = await mbFetch(key, `/feed?sort=${sort}&limit=${limit}`)
         if (data.error) return `Moltbook error: ${data.error}`
         const posts = data.posts || []
         if (!posts.length) return "No posts found in feed."
@@ -29,9 +43,9 @@ async function executeMoltbookTool(tool: string, args: Record<string, any>): Pro
           `${i+1}. [${p.id}] "${p.title}" by @${p.author?.name} in m/${p.submolt?.name} — ${p.upvotes ?? 0} upvotes\n   ${(p.content || "").slice(0, 120)}...`
         ).join("\n\n")
       }
+
       case "moltbook_profile": {
-        const res = await fetch(`${MB}/agents/me`, { headers })
-        const data = await res.json()
+        const data = await mbFetch(key, "/agents/me")
         if (data.error) return `Profile error: ${data.error}`
         const a = data.agent || data
         return `@${a.name} — ${a.description || "no description"}
@@ -39,10 +53,10 @@ Karma: ${a.karma ?? 0} | Followers: ${a.follower_count ?? 0} | Following: ${a.fo
 Status: ${a.is_claimed ? "✅ Claimed" : "⏳ Pending"} | Active: ${a.is_active ? "Yes" : "No"}
 Profile: https://www.moltbook.com/u/${a.name}`
       }
+
       case "moltbook_search": {
         const query = args.query || ""
-        const res = await fetch(`${MB}/search?q=${encodeURIComponent(query)}&type=all&limit=10`, { headers })
-        const data = await res.json()
+        const data = await mbFetch(key, `/search?q=${encodeURIComponent(query)}&type=all&limit=10`)
         if (data.error) return `Search error: ${data.error}`
         const results = data.results || []
         if (!results.length) return `No results found for: "${query}"`
@@ -50,29 +64,110 @@ Profile: https://www.moltbook.com/u/${a.name}`
           `${i+1}. [${r.type}] "${r.title || r.content?.slice(0,60)}" by @${r.author?.name}`
         ).join("\n")
       }
+
       case "moltbook_post": {
         const { title, content, submolt = "general" } = args
-        const res = await fetch(`${MB}/posts`, {
-          method: "POST", headers,
-          body: JSON.stringify({ submolt, title, content }),
-        })
-        const data = await res.json()
+        const data = await mbFetch(key, "/posts", "POST", { submolt, title, content })
         if (data.error) return `Failed to post: ${data.error}`
         if (data.post?.verification?.challenge_text) {
           return `Post created but needs verification. Challenge: ${data.post.verification.challenge_text}`
         }
         return data.success ? `✅ Posted: "${title}" in m/${submolt}` : JSON.stringify(data).slice(0, 200)
       }
+
       case "moltbook_comment": {
         const { post_id, content } = args
-        const res = await fetch(`${MB}/posts/${post_id}/comments`, {
-          method: "POST", headers,
-          body: JSON.stringify({ content }),
-        })
-        const data = await res.json()
+        const data = await mbFetch(key, `/posts/${post_id}/comments`, "POST", { content })
         if (data.error) return `Comment error: ${data.error}`
         return data.success ? `✅ Comment posted on post ${post_id}` : JSON.stringify(data).slice(0, 200)
       }
+
+      // ── Multi-agent tools ───────────────────────────────────
+
+      case "moltbook_discover": {
+        const query = args.query || ""
+        const data = await mbFetch(key, `/feed?sort=new&limit=25`)
+        if (data.error) return `Discover error: ${data.error}`
+
+        const posts = data.posts || []
+        const agentMap = new Map<string, { name: string; posts: number; upvotes: number; latestTitle: string; latestId: string }>()
+
+        for (const p of posts) {
+          const name = p.author?.name
+          if (!name) continue
+          if (query && !name.toLowerCase().includes(query.toLowerCase()) &&
+              !p.title?.toLowerCase().includes(query.toLowerCase()) &&
+              !p.content?.toLowerCase().includes(query.toLowerCase())) continue
+
+          if (agentMap.has(name)) {
+            const a = agentMap.get(name)!
+            a.posts++
+            a.upvotes += (p.upvotes ?? 0)
+          } else {
+            agentMap.set(name, { name, posts: 1, upvotes: p.upvotes ?? 0, latestTitle: p.title, latestId: p.id })
+          }
+        }
+
+        if (!agentMap.size) return query ? `No agents found matching "${query}".` : "No agents found in recent feed."
+        const agents = [...agentMap.values()].sort((a, b) => b.upvotes - a.upvotes)
+        return `Discovered ${agents.length} agents from recent feed:\n\n` +
+          agents.map((a, i) =>
+            `${i+1}. @${a.name} — ${a.posts} post(s), ${a.upvotes} total upvotes\n   Latest: "${a.latestTitle}" [post:${a.latestId}]`
+          ).join("\n\n")
+      }
+
+      case "moltbook_agent_profile": {
+        const agentName = args.agent_name || ""
+        if (!agentName) return "agent_name is required."
+
+        const data = await mbFetch(key, `/agents/${encodeURIComponent(agentName)}`)
+        if (data.error) {
+          // Fallback: search for this agent's posts
+          const searchData = await mbFetch(key, `/search?q=${encodeURIComponent(agentName)}&type=all&limit=10`)
+          const results = (searchData.results || []).filter((r: any) =>
+            r.author?.name?.toLowerCase() === agentName.toLowerCase()
+          )
+          if (!results.length) return `Could not find agent @${agentName}.`
+          return `@${agentName} — found ${results.length} post(s)\nRecent posts:\n` +
+            results.map((p: any, i: number) => `${i+1}. [${p.id}] "${p.title}" — ${p.upvotes ?? 0} upvotes`).join("\n")
+        }
+
+        const a = data.agent || data
+        const postsData = await mbFetch(key, `/agents/${encodeURIComponent(agentName)}/posts?limit=5`).catch(() => ({ posts: [] }))
+        const recentPosts = postsData.posts || []
+
+        return `@${a.name || agentName} — ${a.description || "no description"}
+Karma: ${a.karma ?? "?"} | Followers: ${a.follower_count ?? "?"} | Following: ${a.following_count ?? "?"}
+Active: ${a.is_active ? "Yes" : "No"} | Claimed: ${a.is_claimed ? "Yes" : "No"}
+${recentPosts.length > 0 ? `\nRecent posts:\n${recentPosts.map((p: any, i: number) => `${i+1}. [${p.id}] "${p.title}" — ${p.upvotes ?? 0} upvotes`).join("\n")}` : ""}`
+      }
+
+      case "moltbook_follow_agent": {
+        const agentName = args.agent_name || ""
+        if (!agentName) return "agent_name is required."
+        const data = await mbFetch(key, `/agents/${encodeURIComponent(agentName)}/follow`, "POST")
+        if (data.error) return `Follow error: ${data.error}`
+        return data.success ? `✅ Now following @${agentName}` : JSON.stringify(data).slice(0, 200)
+      }
+
+      case "moltbook_read_post": {
+        const { post_id } = args
+        if (!post_id) return "post_id is required."
+
+        const postData = await mbFetch(key, `/posts/${post_id}`)
+        if (postData.error) return `Post error: ${postData.error}`
+
+        const p = postData.post || postData
+        const commentsData = await mbFetch(key, `/posts/${post_id}/comments?limit=10`).catch(() => ({ comments: [] }))
+        const comments = commentsData.comments || []
+
+        return `"${p.title}" by @${p.author?.name} in m/${p.submolt?.name}
+${p.upvotes ?? 0} upvotes | ${comments.length} comments
+
+${p.content || ""}
+${comments.length > 0 ? `\nComments:\n${comments.map((c: any, i: number) => `  ${i+1}. @${c.author?.name}: ${(c.content || "").slice(0, 150)}`).join("\n")}` : "\nNo comments yet."}`
+      }
+
       default:
         return `Unknown moltbook tool: ${tool}`
     }
@@ -101,7 +196,7 @@ export function useChat() {
 
     const mb_key = typeof window !== "undefined" ? localStorage.getItem("mb_key") || "" : ""
 
-    // IMPORTANT: declared outside try so finally block can access it
+    // Declared outside try so finally block can access it
     let clientExecuteData: { tool_calls: any[]; loop_state: any[] } | null = null
 
     try {
