@@ -4,11 +4,10 @@ import { useChatStore } from "@/lib/store"
 
 interface Props {
   onSend: (text: string) => void
-  onAbort: () => void
   disabled: boolean
 }
 
-export function ChatInput({ onSend, onAbort, disabled }: Props) {
+export function ChatInput({ onSend, disabled }: Props) {
   const [value, setValue]     = useState("")
   const textareaRef           = useRef<HTMLTextAreaElement>(null)
   const { agentMode, setAgentMode } = useChatStore()
@@ -73,20 +72,7 @@ export function ChatInput({ onSend, onAbort, disabled }: Props) {
           <span>{agentMode ? "Agent" : "Direct"}</span>
         </button>
 
-        {/* Stop button when loading, Send button otherwise */}
-        {disabled ? (
-          <button
-            onClick={onAbort}
-            title="Stop generating"
-            className="w-8 h-8 rounded-xl bg-[#2e2e40] border border-[#4a4a60]
-              flex items-center justify-center flex-shrink-0
-              hover:bg-[#3a3a55] hover:border-[#6b6b8a] transition-all duration-150"
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" className="text-[#9a9ab8]">
-              <rect x="1" y="1" width="8" height="8" rx="1.5" />
-            </svg>
-          </button>
-        ) : (
+        {/* Send button */}
         <button
           onClick={handleSend}
           disabled={disabled || !value.trim()}
@@ -102,7 +88,6 @@ export function ChatInput({ onSend, onAbort, disabled }: Props) {
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
         </button>
-        )}
       </div>
 
       {/* Mode hint — subtle, below the box */}
