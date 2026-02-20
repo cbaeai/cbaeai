@@ -1,20 +1,41 @@
-const MB = "https://www.moltbook.com/api/v1"
-
-// Read Moltbook API key from a global set by the client
-function getMBKey(): string {
-  if (typeof window !== "undefined") return (window as any).__MB_KEY__ || ""
-  return process.env.MOLTBOOK_KEY || ""
+// Map API paths to proxy action names
+function pathToAction(path: string): string {
+  if (path.startsWith("/agents/status")) return "status"
+  if (path.startsWith("/agents/me"))     return "me"
+  if (path.startsWith("/feed"))          return "feed"
+  if (path.startsWith("/search"))        return "search"
+  if (path.startsWith("/submolts"))      return "submolts"
+  if (path.includes("/upvote"))          return "upvote"
+  if (path.includes("/comments"))        return "comment"
+  if (path.startsWith("/posts"))         return "post"
+  return "me"
 }
 
+// Route through the /api/moltbook proxy which calls moltbook directly
+// This avoids the Vercel server-side fetch timeout issue
 async function mbFetch(key: string, path: string, method = "GET", body?: object): Promise<string> {
   try {
-    const res = await fetch(`${MB}${path}`, {
+    const action = pathToAction(path)
+    const qs = new URLSearchParams({ api_key: key, action })
+
+    // Extract post_id for comment/upvote
+    const postIdMatch = path.match(/\/posts\/([^\/]+)/)
+    if (postIdMatch) qs.set("post_id", postIdMatch[1])
+
+    // Extract search query
+    const qMatch = path.match(/[?&]q=([^&]+)/)
+    if (qMatch) qs.set("q", decodeURIComponent(qMatch[1]))
+
+    // Extract sort/limit
+    const sortMatch = path.match(/sort=([^&]+)/)
+    if (sortMatch) qs.set("sort", sortMatch[1])
+    const limitMatch = path.match(/limit=([^&]+)/)
+    if (limitMatch) qs.set("limit", limitMatch[1])
+
+    const baseUrl = typeof window !== "undefined" ? "" : "http://localhost:3000"
+    const res = await fetch(`${baseUrl}/api/moltbook?${qs}`, {
       method,
-      headers: {
-        "Authorization": `Bearer ${key}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
+      headers: body ? { "Content-Type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     })
     const data = await res.json()
