@@ -5,23 +5,22 @@ import { recall, memorize } from "@/lib/memory"
 
 const SYSTEM = `You are Cbae, a brilliant autonomous AI assistant and Moltbook agent.
 
-You can search the web, run calculations, check weather, save notes, browse URLs, generate images, and interact with Moltbook — a social network for AI agents.
-
-## Image Generation
-- Use generate_image when the user asks to create, draw, generate, or visualize anything
-- Write a detailed, vivid prompt for best results
-- After generating, describe what you created
+You can search the web, run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
 
 ## Your Moltbook Tools
+
+### Core tools:
 - moltbook_feed — read the feed (sort: hot/new/top/rising)
 - moltbook_post — create a post
 - moltbook_search — semantic search
 - moltbook_profile — your own profile & stats
 - moltbook_comment — comment on a post
-- moltbook_discover — scan the feed and discover other AI agents
-- moltbook_agent_profile — get the full profile and recent posts of a specific agent
+
+### Multi-agent tools:
+- moltbook_discover — scan the feed and discover other AI agents. Use this to find who's active, what they post about, and get their post IDs.
+- moltbook_agent_profile — get the full profile and recent posts of a specific agent by username
 - moltbook_follow_agent — follow an agent
-- moltbook_read_post — read a post's full content AND all its comments
+- moltbook_read_post — read a post's full content AND all its comments. Use this before commenting so you write something relevant.
 
 ## Multi-agent behavior
 When asked to interact with other agents:
@@ -29,9 +28,12 @@ When asked to interact with other agents:
 2. Use moltbook_read_post to read their posts before engaging
 3. Write thoughtful, genuine comments — not generic praise
 4. Use moltbook_agent_profile to understand an agent before following them
+5. Report back clearly: which agents you found, what they post about, what you did
 
 ## How to get the Moltbook API key
 The user's key is in the message context as [MOLTBOOK_KEY: xxx]. Always extract it and pass it to every moltbook_* tool call as the "key" argument.
+
+If no key is provided when the user asks for Moltbook actions, ask: "Please provide your Moltbook API key."
 
 You feel like a real expert colleague, not a chatbot. Think before you act and always deliver great results.
 
@@ -40,15 +42,22 @@ In agent mode, before taking any action or calling any tool, start your response
 <thinking>
 [Your plan: what the user wants, which tools you will use and why, what you expect]
 </thinking>
-Keep it to 2-5 sentences. After </thinking>, proceed with tool calls or your answer.`
+Keep it to 2-5 sentences. Be specific and genuine. After </thinking>, proceed with tool calls or your answer.
+The user will see this in a collapsible panel labeled "Cbae's reasoning".`
 
 export const runtime = "nodejs"
 export const maxDuration = 60
 
 const MOLTBOOK_TOOLS = new Set([
-  "moltbook_feed", "moltbook_post", "moltbook_search", "moltbook_profile",
-  "moltbook_comment", "moltbook_discover", "moltbook_agent_profile",
-  "moltbook_follow_agent", "moltbook_read_post",
+  "moltbook_feed",
+  "moltbook_post",
+  "moltbook_search",
+  "moltbook_profile",
+  "moltbook_comment",
+  "moltbook_discover",
+  "moltbook_agent_profile",
+  "moltbook_follow_agent",
+  "moltbook_read_post",
 ])
 
 export async function POST(req: NextRequest) {
@@ -102,12 +111,18 @@ export async function POST(req: NextRequest) {
 
             if (!msg.tool_calls?.length) {
               const raw = msg.content || ""
+
+              // Extract <thinking> block if present
               const thinkMatch = raw.match(/<thinking>([\s\S]*?)<\/thinking>/i)
               const thinkText  = thinkMatch ? thinkMatch[1].trim() : ""
               const finalText  = raw.replace(/<thinking>[\s\S]*?<\/thinking>/i, "").trim()
 
-              if (thinkText) send({ type: "thinking", content: thinkText })
+              // Emit thinking block first (if any)
+              if (thinkText) {
+                send({ type: "thinking", content: thinkText })
+              }
 
+              // Stream final answer word by word
               for (const word of finalText.split(" ")) {
                 send({ type: "token", content: word + " " })
                 await new Promise(r => setTimeout(r, 10))
@@ -121,26 +136,16 @@ export async function POST(req: NextRequest) {
             const moltbookCalls = msg.tool_calls.filter(tc => MOLTBOOK_TOOLS.has(tc.function.name))
             const serverCalls   = msg.tool_calls.filter(tc => !MOLTBOOK_TOOLS.has(tc.function.name))
 
+            // Execute server-side tools normally
             for (const tc of serverCalls) {
               const args = JSON.parse(tc.function.arguments)
               send({ type: "tool_call", tool: tc.function.name, args })
               const result = await executeTool(tc.function.name, args)
-
-              // Fix #5: Detect image result and send as image event
-              if (result.startsWith("__IMAGE__")) {
-                const urlMatch = result.match(/__IMAGE__(.+?)__PROMPT__(.+)$/)
-                if (urlMatch) {
-                  send({ type: "image", url: urlMatch[1], prompt: urlMatch[2] })
-                  send({ type: "tool_result", tool: tc.function.name, result: `Generated image for: "${urlMatch[2]}"` })
-                  loop.push({ role: "tool", tool_call_id: tc.id, content: `Image generated successfully. URL: ${urlMatch[1]}` } as any)
-                  continue
-                }
-              }
-
               send({ type: "tool_result", tool: tc.function.name, result: result.slice(0, 400) })
               loop.push({ role: "tool", tool_call_id: tc.id, content: result } as any)
             }
 
+            // Moltbook tools — delegate to browser
             if (moltbookCalls.length > 0) {
               for (const tc of moltbookCalls) {
                 const args = JSON.parse(tc.function.arguments)
