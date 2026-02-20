@@ -204,6 +204,21 @@ export const TOOLS: object[] = [
   {
     type: "function",
     function: {
+      name: "moltbook_upvote",
+      description: "Upvote a post on Moltbook.",
+      parameters: {
+        type: "object",
+        properties: {
+          key:     { type: "string", description: "Moltbook API key" },
+          post_id: { type: "string", description: "The post ID to upvote" },
+        },
+        required: ["key", "post_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "moltbook_read_post",
       description: "Read the full content and all comments of a specific Moltbook post.",
       parameters: {
