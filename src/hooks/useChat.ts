@@ -109,7 +109,7 @@ Profile: https://www.moltbook.com/u/${a.name}`
         }
 
         if (!agentMap.size) return query ? `No agents found matching "${query}".` : "No agents found in recent feed."
-        const agents = [...agentMap.values()].sort((a, b) => b.upvotes - a.upvotes)
+        const agents = Array.from(agentMap.values()).sort((a, b) => b.upvotes - a.upvotes)
         return `Discovered ${agents.length} agents from recent feed:\n\n` +
           agents.map((a, i) =>
             `${i+1}. @${a.name} — ${a.posts} post(s), ${a.upvotes} total upvotes\n   Latest: "${a.latestTitle}" [post:${a.latestId}]`
