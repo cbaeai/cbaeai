@@ -6,8 +6,12 @@ const MODELS = [
   "openai/gpt-4o-mini",
   "openai/gpt-4o",
   "anthropic/claude-3-haiku",
+  "anthropic/claude-3.5-sonnet",
   "google/gemini-flash-1.5",
+  "google/gemini-pro-1.5",
   "mistralai/mistral-small",
+  "meta-llama/llama-3.3-70b-instruct",
+  "arcee-ai/trinity-large-preview:free",
 ]
 
 export function Header() {
