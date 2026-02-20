@@ -48,13 +48,6 @@ export function Header() {
         </button>
 
         <Link
-          href="/agents"
-          className="text-xs text-fog hover:text-teal border border-rim hover:border-teal/30 rounded-lg px-3 py-1.5 transition-colors"
-        >
-          🤖 Agents
-        </Link>
-
-        <Link
           href="/moltbook"
           className="text-xs text-fog hover:text-gold border border-rim hover:border-gold/30 rounded-lg px-3 py-1.5 transition-colors"
         >
