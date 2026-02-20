@@ -5,50 +5,53 @@ import { PostCard } from "@/components/moltbook/PostCard"
 
 type Tab = "feed" | "post" | "search" | "profile" | "register"
 
-async function callMB(params: Record<string, string>, method = "GET", body?: object) {
-  const qs  = new URLSearchParams(params).toString()
-  const res = await fetch(`/api/moltbook?${qs}`, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return res.json()
+const MB = "https://www.moltbook.com/api/v1"
+
+// Call Moltbook API directly from the browser — no server proxy
+async function callMB(key: string, path: string, method = "GET", body?: object) {
+  try {
+    const res = await fetch(`${MB}${path}`, {
+      method,
+      headers: {
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    return await res.json()
+  } catch (e: any) {
+    return { error: e?.message || "Request failed" }
+  }
 }
 
 export default function MoltbookPage() {
-  const [apiKey, setApiKey]   = useState("")
+  const [apiKey, setApiKey]     = useState("")
   const [savedKey, setSavedKey] = useState("")
-  const [tab, setTab]         = useState<Tab>("feed")
-  const [status, setStatus]   = useState("")
-  const [posts, setPosts]     = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg]         = useState("")
-  const [sort, setSort]       = useState("hot")
-  const [limit, setLimit]     = useState(10)
-  const [submolt, setSubmolt] = useState("general")
-  const [postTitle, setPostTitle]   = useState("")
+  const [tab, setTab]           = useState<Tab>("feed")
+  const [status, setStatus]     = useState("")
+  const [posts, setPosts]       = useState<any[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [msg, setMsg]           = useState("")
+  const [sort, setSort]         = useState("hot")
+  const [limit, setLimit]       = useState(10)
+  const [submolt, setSubmolt]   = useState("general")
+  const [postTitle, setPostTitle]     = useState("")
   const [postContent, setPostContent] = useState("")
-  const [searchQ, setSearchQ]       = useState("")
+  const [searchQ, setSearchQ]         = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
-  const [profile, setProfile]       = useState<any>(null)
-  const [regName, setRegName]       = useState("Cbae")
-  const [regDesc, setRegDesc]       = useState("Autonomous AI assistant")
-  const [regResult, setRegResult]   = useState<any>(null)
+  const [profile, setProfile]   = useState<any>(null)
+  const [regName, setRegName]   = useState("Cbae")
+  const [regDesc, setRegDesc]   = useState("Autonomous AI assistant")
+  const [regResult, setRegResult] = useState<any>(null)
 
   useEffect(() => {
     const k = localStorage.getItem("mb_key") || ""
-    if (k) {
-      setApiKey(k)
-      setSavedKey(k)
-      setStatus("saved")
-    }
+    if (k) { setApiKey(k); setSavedKey(k); setStatus("saved") }
   }, [])
 
-  // Auto-load profile when tab switches to "profile" and we have a key
   useEffect(() => {
-    if (tab === "profile" && savedKey && !profile) {
-      loadProfile()
-    }
+    if (tab === "profile" && savedKey && !profile) loadProfile()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, savedKey])
 
@@ -56,37 +59,24 @@ export default function MoltbookPage() {
     const k = apiKey.trim()
     if (!k) { setMsg("Enter your API key first"); return }
     localStorage.setItem("mb_key", k)
-    setSavedKey(k)
-    setStatus("saved")
-    setMsg("Key saved!")
+    setSavedKey(k); setStatus("saved"); setMsg("Key saved!")
   }
 
   const testKey = async () => {
     if (!savedKey) { setMsg("Save your API key first"); return }
     setLoading(true); setMsg("Testing…")
-    const r = await callMB({ api_key: savedKey, action: "status" })
+    const r = await callMB(savedKey, "/agents/status")
     setLoading(false)
-    if (r.error) {
-      const isTimeout = r.error.toLowerCase().includes("timeout") || r.error.toLowerCase().includes("timed out")
-      if (isTimeout) {
-        // Timeout does NOT mean invalid key — moltbook API is just slow
-        setMsg("Moltbook is slow right now but your key is saved ✓ — try Profile tab or Load Feed directly.")
-        setStatus("saved")
-      } else {
-        setMsg(`Error: ${r.error}`)
-        setStatus("error")
-      }
-      return
-    }
+    if (r.error) { setMsg(`Error: ${r.error}`); setStatus("error"); return }
     const s = r.status || "unknown"
     setStatus(s)
-    setMsg(s === "claimed" ? "✅ Agent is live!" : s === "pending_claim" ? "⏳ Agent pending claim" : `Status: ${JSON.stringify(r)}`)
+    setMsg(s === "claimed" ? "✅ Agent is live!" : s === "pending_claim" ? "⏳ Pending claim" : `Status: ${JSON.stringify(r)}`)
   }
 
   const loadFeed = async () => {
     if (!savedKey) { setMsg("Save your API key first"); return }
     setLoading(true); setMsg(""); setPosts([])
-    const data = await callMB({ api_key: savedKey, action: "feed", sort, limit: String(limit) })
+    const data = await callMB(savedKey, `/feed?sort=${sort}&limit=${limit}`)
     setLoading(false)
     if (data.error) { setMsg(`Error: ${data.error}`); return }
     const p = data.posts || data.data?.posts || []
@@ -95,13 +85,13 @@ export default function MoltbookPage() {
   }
 
   const handleUpvote = async (postId: string) => {
-    const r = await callMB({ api_key: savedKey, action: "upvote", post_id: postId }, "POST")
-    setMsg(r.error ? `Error: ${r.error}` : "Upvoted!")
+    const r = await callMB(savedKey, `/posts/${postId}/upvote`, "POST")
+    setMsg(r.error ? `Error: ${r.error}` : "Upvoted! 🦞")
   }
 
   const handleReply = async (post: any) => {
     setLoading(true)
-    const r = await callMB({ api_key: savedKey, action: "comment", post_id: post.id }, "POST", { content: `Interesting thoughts on "${post.title}". Thanks for sharing!` })
+    const r = await callMB(savedKey, `/posts/${post.id}/comments`, "POST", { content: `Interesting thoughts on "${post.title}". Thanks for sharing!` })
     setLoading(false)
     setMsg(r.error ? `Error: ${r.error}` : "Reply posted!")
   }
@@ -109,16 +99,16 @@ export default function MoltbookPage() {
   const handlePost = async () => {
     if (!postTitle || !postContent) { setMsg("Fill in title and content"); return }
     setLoading(true)
-    const r = await callMB({ api_key: savedKey, action: "post" }, "POST", { submolt, title: postTitle, content: postContent })
+    const r = await callMB(savedKey, "/posts", "POST", { submolt, title: postTitle, content: postContent })
     setLoading(false)
     if (r.error) { setMsg(`Error: ${r.error}`); return }
-    setMsg("Posted!"); setPostTitle(""); setPostContent("")
+    setMsg("Posted! 🦞"); setPostTitle(""); setPostContent("")
   }
 
   const handleSearch = async () => {
     if (!searchQ) return
     setLoading(true)
-    const r = await callMB({ api_key: savedKey, action: "search", q: searchQ })
+    const r = await callMB(savedKey, `/search?q=${encodeURIComponent(searchQ)}&type=all&limit=10`)
     setLoading(false)
     setSearchResults(r.results || [])
     if (!r.results?.length) setMsg("No results found")
@@ -128,24 +118,32 @@ export default function MoltbookPage() {
     const key = savedKey || apiKey.trim()
     if (!key) { setMsg("Save your API key first"); return }
     setLoading(true); setMsg("")
-    const r = await callMB({ api_key: key, action: "me" })
+    const r = await callMB(key, "/agents/me")
     setLoading(false)
-    if (r.error) { setMsg(`Error loading profile: ${r.error}`); return }
+    if (r.error) { setMsg(`Error: ${r.error}`); return }
     const agent = r.agent ?? r.data?.agent ?? (r.success === false ? null : r)
     if (!agent || typeof agent !== "object" || !agent.name) {
-      setMsg(`Unexpected response: ${JSON.stringify(r).slice(0, 200)}`)
-      return
+      setMsg(`Unexpected response: ${JSON.stringify(r).slice(0, 200)}`); return
     }
-    setProfile(agent)
-    setStatus("claimed")
+    setProfile(agent); setStatus("claimed")
   }
 
   const handleRegister = async () => {
     setLoading(true); setMsg("Registering…")
-    const r = await callMB({ action: "register" }, "POST", { name: regName, description: regDesc })
-    setLoading(false)
-    if (r.error) { setMsg(`Error: ${r.error}`); return }
-    setRegResult(r)
+    // Register doesn't need an API key
+    try {
+      const res = await fetch(`${MB}/agents/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: regName, description: regDesc }),
+      })
+      const r = await res.json()
+      setLoading(false)
+      if (r.error) { setMsg(`Error: ${r.error}`); return }
+      setRegResult(r)
+    } catch (e: any) {
+      setLoading(false); setMsg(`Error: ${e?.message}`)
+    }
   }
 
   const TABS: { id: Tab; label: string }[] = [
@@ -194,7 +192,11 @@ export default function MoltbookPage() {
         </div>
 
         {msg && (
-          <div className={`mx-6 mt-3 px-4 py-2 rounded-lg text-sm border ${msg.includes("Error") ? "bg-red-500/5 border-red-500/20 text-red-400" : msg.includes("✅") || msg.includes("Posted") || msg.includes("saved") || msg.includes("live") ? "bg-teal/5 border-teal/20 text-teal" : "bg-ink2 border-rim text-text2"}`}>
+          <div className={`mx-6 mt-3 px-4 py-2 rounded-lg text-sm border ${
+            msg.includes("Error") ? "bg-red-500/5 border-red-500/20 text-red-400"
+            : msg.includes("✅") || msg.includes("Posted") || msg.includes("saved") || msg.includes("live") || msg.includes("Upvoted")
+              ? "bg-teal/5 border-teal/20 text-teal"
+            : "bg-ink2 border-rim text-text2"}`}>
             {msg}
           </div>
         )}
@@ -257,7 +259,7 @@ export default function MoltbookPage() {
           {tab === "profile" && (
             <div>
               <button onClick={loadProfile} disabled={loading || (!savedKey && !apiKey.trim())} className="text-xs bg-gold/10 border border-gold/30 text-gold rounded-lg px-4 py-2 hover:bg-gold/20 disabled:opacity-40 mb-4">
-                {loading ? "Loading…" : profile ? "↻ Refresh Profile" : "Load My Profile"}
+                {loading ? "Loading…" : profile ? "↻ Refresh" : "Load My Profile"}
               </button>
               {profile && (
                 <div className="bg-ink2 border border-rim rounded-xl p-5">
@@ -267,7 +269,7 @@ export default function MoltbookPage() {
                     <span>⭐ {profile.karma ?? 0} karma</span>
                     <span>👥 {profile.follower_count ?? 0} followers</span>
                     <span>👣 {profile.following_count ?? 0} following</span>
-                    <span>{profile.is_claimed ? "✅ Claimed" : "⏳ Pending claim"}</span>
+                    <span>{profile.is_claimed ? "✅ Claimed" : "⏳ Pending"}</span>
                     <span>{profile.is_active ? "🟢 Active" : "⚪ Inactive"}</span>
                   </div>
                   {profile.owner?.x_handle && (
@@ -277,9 +279,7 @@ export default function MoltbookPage() {
                     </div>
                   )}
                   <a href={`https://www.moltbook.com/u/${profile.name}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-block mt-3 text-xs text-teal hover:underline">
-                    View on Moltbook ↗
-                  </a>
+                    className="inline-block mt-3 text-xs text-teal hover:underline">View on Moltbook ↗</a>
                 </div>
               )}
             </div>
