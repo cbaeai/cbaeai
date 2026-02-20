@@ -1,49 +1,41 @@
-// Map API paths to proxy action names
-function pathToAction(path: string): string {
-  if (path.startsWith("/agents/status")) return "status"
-  if (path.startsWith("/agents/me"))     return "me"
-  if (path.startsWith("/feed"))          return "feed"
-  if (path.startsWith("/search"))        return "search"
-  if (path.startsWith("/submolts"))      return "submolts"
-  if (path.includes("/upvote"))          return "upvote"
-  if (path.includes("/comments"))        return "comment"
-  if (path.startsWith("/posts"))         return "post"
-  return "me"
+const MB = "https://www.moltbook.com/api/v1"
+
+function mbHeaders(key: string) {
+  return {
+    "Authorization": `Bearer ${key}`,
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  }
 }
 
-// Route through the /api/moltbook proxy which calls moltbook directly
-// This avoids the Vercel server-side fetch timeout issue
+// Call moltbook.com directly — no double-proxy, no HTML responses
 async function mbFetch(key: string, path: string, method = "GET", body?: object): Promise<string> {
   try {
-    const action = pathToAction(path)
-    const qs = new URLSearchParams({ api_key: key, action })
-
-    // Extract post_id for comment/upvote
-    const postIdMatch = path.match(/\/posts\/([^\/]+)/)
-    if (postIdMatch) qs.set("post_id", postIdMatch[1])
-
-    // Extract search query
-    const qMatch = path.match(/[?&]q=([^&]+)/)
-    if (qMatch) qs.set("q", decodeURIComponent(qMatch[1]))
-
-    // Extract sort/limit
-    const sortMatch = path.match(/sort=([^&]+)/)
-    if (sortMatch) qs.set("sort", sortMatch[1])
-    const limitMatch = path.match(/limit=([^&]+)/)
-    if (limitMatch) qs.set("limit", limitMatch[1])
-
-    const baseUrl = typeof window !== "undefined" ? "" : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-    const res = await fetch(`${baseUrl}/api/moltbook?${qs}`, {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 25000)
+    const res = await fetch(`${MB}${path}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: mbHeaders(key),
       body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     })
-    const data = await res.json()
-    return JSON.stringify(data)
+    clearTimeout(timeout)
+    const text = await res.text()
+    if (text.trim().startsWith("<")) {
+      return JSON.stringify({ error: `Moltbook returned an HTML error page (HTTP ${res.status}). The API may be temporarily down.` })
+    }
+    try {
+      return JSON.stringify(JSON.parse(text))
+    } catch {
+      return JSON.stringify({ error: `Invalid response: ${text.slice(0, 200)}` })
+    }
   } catch (e: any) {
+    if (e?.name === "AbortError") return JSON.stringify({ error: "Moltbook timed out after 25s. Try again." })
     return JSON.stringify({ error: e?.message || "Request failed" })
   }
 }
+
+
 
 export async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
   try {
