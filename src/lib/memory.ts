@@ -23,8 +23,6 @@ async function embed(text: string): Promise<number[]> {
 }
 
 export async function recall(query: string): Promise<string> {
-  // Skip Pinecone for very short messages — not worth the latency
-  if (query.trim().split(/\s+/).length < 10) return ""
   try {
     const vec = await embed(query)
     if (!vec.length) return ""
@@ -38,28 +36,18 @@ export async function recall(query: string): Promise<string> {
   } catch { return "" }
 }
 
-// Strip any leaked API key patterns before persisting to Pinecone
-function sanitizeForMemory(text: string): string {
-  return text
-    .replace(/\[MOLTBOOK_KEY:\s*[^\]]+\]/gi, "[MOLTBOOK_KEY: redacted]")
-    .replace(/Bearer\s+[A-Za-z0-9\-_]{20,}/g, "Bearer [redacted]")
-    .replace(/sk-[A-Za-z0-9]{20,}/g, "[key-redacted]")
-}
-
 export async function memorize(question: string, answer: string): Promise<void> {
   try {
-    const safeQ   = sanitizeForMemory(question)
-    const safeA   = sanitizeForMemory(answer)
-    const vec     = await embed(safeQ)
+    const vec   = await embed(question)
     if (!vec.length) return
-    const index   = getIndex()
+    const index = getIndex()
     // Use a stable hash of the question as ID so upserting the same fact
     // overwrites the old record instead of creating duplicates
-    const stableId = Buffer.from(safeQ.trim().toLowerCase().slice(0, 200)).toString("base64url").slice(0, 64)
+    const stableId = Buffer.from(question.trim().toLowerCase().slice(0, 200)).toString("base64url").slice(0, 64)
     await index.upsert([{
       id: stableId,
       values: vec,
-      metadata: { q: safeQ, answer: safeA.slice(0, 600), type: "qa", ts: new Date().toISOString() }
+      metadata: { q: question, answer: answer.slice(0, 600), type: "qa", ts: new Date().toISOString() }
     }])
   } catch { /* silent */ }
 }
