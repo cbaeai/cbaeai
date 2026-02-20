@@ -26,8 +26,20 @@ You feel like a real expert colleague, not a chatbot. Think before you act and a
 export const runtime = "nodejs"
 export const maxDuration = 60
 
+const MOLTBOOK_TOOLS = new Set(["moltbook_feed", "moltbook_post", "moltbook_search", "moltbook_profile", "moltbook_comment"])
+
 export async function POST(req: NextRequest) {
-  const { message, history = [], agent_mode = true, model = "openai/gpt-4o-mini", mb_key = "" } = await req.json()
+  const {
+    message,
+    history = [],
+    agent_mode = true,
+    model = "openai/gpt-4o-mini",
+    mb_key = "",
+    // Client can send back tool results for moltbook tools it executed browser-side
+    tool_results = [] as Array<{ tool_call_id: string; tool: string; result: string }>,
+    // Full loop state for resuming after client-side tool execution
+    loop_messages = null as any[] | null,
+  } = await req.json()
 
   const client = new OpenAI({
     apiKey: process.env.OPENROUTER_KEY!,
@@ -35,25 +47,32 @@ export async function POST(req: NextRequest) {
   })
 
   const memCtx = await recall(message)
-  // Inject MB key into system context so agent can use it
   const keyContext = mb_key ? `\n\n[MOLTBOOK_KEY: ${mb_key}]` : ""
   const system = (memCtx ? `${SYSTEM}\n\nRelevant memory:\n${memCtx}` : SYSTEM) + keyContext
 
-  const messages = [
-    { role: "system" as const, content: system },
-    ...history,
-    { role: "user" as const, content: message },
-  ]
-
   const encoder = new TextEncoder()
-  const stream  = new ReadableStream({
+  const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: object) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
 
       try {
         if (agent_mode) {
-          const loop = [...messages]
+          // If resuming after client-side tool execution, use provided loop state
+          let loop: any[]
+          if (loop_messages && tool_results.length > 0) {
+            loop = [...loop_messages]
+            for (const tr of tool_results) {
+              loop.push({ role: "tool", tool_call_id: tr.tool_call_id, content: tr.result })
+            }
+          } else {
+            loop = [
+              { role: "system", content: system },
+              ...history,
+              { role: "user", content: message },
+            ]
+          }
+
           while (true) {
             const res = await client.chat.completions.create({
               model, messages: loop, tools: TOOLS as any,
@@ -72,15 +91,47 @@ export async function POST(req: NextRequest) {
             }
 
             loop.push(msg as any)
-            for (const tc of msg.tool_calls) {
+
+            // Check if any tool calls are moltbook tools (need browser execution)
+            const moltbookCalls = msg.tool_calls.filter(tc => MOLTBOOK_TOOLS.has(tc.function.name))
+            const serverCalls = msg.tool_calls.filter(tc => !MOLTBOOK_TOOLS.has(tc.function.name))
+
+            // Execute server-side tools normally
+            for (const tc of serverCalls) {
               const args = JSON.parse(tc.function.arguments)
               send({ type: "tool_call", tool: tc.function.name, args })
               const result = await executeTool(tc.function.name, args)
               send({ type: "tool_result", tool: tc.function.name, result: result.slice(0, 400) })
-              loop.push({ role: "tool" as any, tool_call_id: tc.id, content: result } as any)
+              loop.push({ role: "tool", tool_call_id: tc.id, content: result } as any)
+            }
+
+            // If there are moltbook tool calls, pause and send them to the browser
+            if (moltbookCalls.length > 0) {
+              for (const tc of moltbookCalls) {
+                const args = JSON.parse(tc.function.arguments)
+                send({ type: "tool_call", tool: tc.function.name, args })
+              }
+
+              // Send a "client_execute" event with the tool calls and current loop state
+              // Browser will execute them and POST back with results
+              send({
+                type: "client_execute",
+                tool_calls: moltbookCalls.map(tc => ({
+                  tool_call_id: tc.id,
+                  tool: tc.function.name,
+                  args: JSON.parse(tc.function.arguments),
+                })),
+                loop_state: loop, // send full loop so browser can resume
+              })
+              break // stop streaming — browser will resume with POST containing results
             }
           }
         } else {
+          const messages = [
+            { role: "system" as const, content: system },
+            ...history,
+            { role: "user" as const, content: message },
+          ]
           const res = await client.chat.completions.create({
             model, messages, stream: true, temperature: 0.75, max_tokens: 4096,
           })
