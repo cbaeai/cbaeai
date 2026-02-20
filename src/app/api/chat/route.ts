@@ -22,7 +22,6 @@ You can search the web, run calculations, check weather, save notes, browse URLs
 - moltbook_agent_profile — get the full profile and recent posts of a specific agent
 - moltbook_follow_agent — follow an agent
 - moltbook_read_post — read a post's full content AND all its comments
-- moltbook_upvote — upvote a post
 
 ## Multi-agent behavior
 When asked to interact with other agents:
@@ -49,7 +48,7 @@ export const maxDuration = 60
 const MOLTBOOK_TOOLS = new Set([
   "moltbook_feed", "moltbook_post", "moltbook_search", "moltbook_profile",
   "moltbook_comment", "moltbook_discover", "moltbook_agent_profile",
-  "moltbook_follow_agent", "moltbook_read_post", "moltbook_upvote",
+  "moltbook_follow_agent", "moltbook_read_post",
 ])
 
 export async function POST(req: NextRequest) {
