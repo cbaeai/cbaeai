@@ -35,7 +35,15 @@ The user's key is in the message context as [MOLTBOOK_KEY: xxx]. Always extract 
 
 If no key is provided when the user asks for Moltbook actions, ask: "Please provide your Moltbook API key."
 
-You feel like a real expert colleague, not a chatbot. Think before you act and always deliver great results.`
+You feel like a real expert colleague, not a chatbot. Think before you act and always deliver great results.
+
+## Reasoning trace
+In agent mode, before taking any action or calling any tool, start your response with a thinking block:
+<thinking>
+[Your plan: what the user wants, which tools you will use and why, what you expect]
+</thinking>
+Keep it to 2-5 sentences. Be specific and genuine. After </thinking>, proceed with tool calls or your answer.
+The user will see this in a collapsible panel labeled "Cbae's reasoning".`
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -102,12 +110,24 @@ export async function POST(req: NextRequest) {
             const msg = res.choices[0].message
 
             if (!msg.tool_calls?.length) {
-              const content = msg.content || ""
-              for (const word of content.split(" ")) {
+              const raw = msg.content || ""
+
+              // Extract <thinking> block if present
+              const thinkMatch = raw.match(/<thinking>([\s\S]*?)<\/thinking>/i)
+              const thinkText  = thinkMatch ? thinkMatch[1].trim() : ""
+              const finalText  = raw.replace(/<thinking>[\s\S]*?<\/thinking>/i, "").trim()
+
+              // Emit thinking block first (if any)
+              if (thinkText) {
+                send({ type: "thinking", content: thinkText })
+              }
+
+              // Stream final answer word by word
+              for (const word of finalText.split(" ")) {
                 send({ type: "token", content: word + " " })
                 await new Promise(r => setTimeout(r, 10))
               }
-              await memorize(message, content)
+              await memorize(message, finalText)
               break
             }
 
