@@ -13,13 +13,25 @@ function mbHeaders(key: string) {
   }
 }
 
-async function mbFetch(key: string, path: string, method = "GET", body?: object): Promise<any> {
-  const res = await fetch(`${MB}${path}`, {
-    method,
-    headers: mbHeaders(key),
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return res.json()
+async function mbFetch(key: string, path: string, method = "GET", body?: object, retries = 2): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${MB}${path}`, {
+        method,
+        headers: mbHeaders(key),
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(12000),
+      })
+      const data = await res.json()
+      return data
+    } catch (e: any) {
+      if (attempt === retries) {
+        const msg = e?.name === "TimeoutError" ? "Request timed out" : (e?.message || "Network error")
+        return { error: msg }
+      }
+      await new Promise(r => setTimeout(r, 600 * (attempt + 1)))
+    }
+  }
 }
 
 // All Moltbook tool execution happens in the browser — Vercel server can't reach moltbook.com
