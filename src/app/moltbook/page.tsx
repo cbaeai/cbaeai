@@ -58,7 +58,7 @@ export default function MoltbookPage() {
     localStorage.setItem("mb_key", k)
     setSavedKey(k)
     setStatus("saved")
-    setMsg("Key saved! Click Test to verify it works.")
+    setMsg("Key saved!")
   }
 
   const testKey = async () => {
@@ -66,10 +66,21 @@ export default function MoltbookPage() {
     setLoading(true); setMsg("Testing…")
     const r = await callMB({ api_key: savedKey, action: "status" })
     setLoading(false)
-    if (r.error) { setMsg(`Error: ${r.error}`); setStatus("error"); return }
+    if (r.error) {
+      const isTimeout = r.error.toLowerCase().includes("timeout") || r.error.toLowerCase().includes("timed out")
+      if (isTimeout) {
+        // Timeout does NOT mean invalid key — moltbook API is just slow
+        setMsg("Moltbook is slow right now but your key is saved ✓ — try Profile tab or Load Feed directly.")
+        setStatus("saved")
+      } else {
+        setMsg(`Error: ${r.error}`)
+        setStatus("error")
+      }
+      return
+    }
     const s = r.status || "unknown"
     setStatus(s)
-    setMsg(s === "claimed" ? "Agent is live!" : s === "pending_claim" ? "Agent pending claim" : `Status: ${JSON.stringify(r)}`)
+    setMsg(s === "claimed" ? "✅ Agent is live!" : s === "pending_claim" ? "⏳ Agent pending claim" : `Status: ${JSON.stringify(r)}`)
   }
 
   const loadFeed = async () => {
@@ -119,14 +130,14 @@ export default function MoltbookPage() {
     setLoading(true); setMsg("")
     const r = await callMB({ api_key: key, action: "me" })
     setLoading(false)
-    if (r.error) { setMsg(`Error: ${r.error}`); return }
-    // Moltbook returns { success, agent } — handle all shapes
+    if (r.error) { setMsg(`Error loading profile: ${r.error}`); return }
     const agent = r.agent ?? r.data?.agent ?? (r.success === false ? null : r)
     if (!agent || typeof agent !== "object" || !agent.name) {
       setMsg(`Unexpected response: ${JSON.stringify(r).slice(0, 200)}`)
       return
     }
     setProfile(agent)
+    setStatus("claimed")
   }
 
   const handleRegister = async () => {
@@ -183,7 +194,7 @@ export default function MoltbookPage() {
         </div>
 
         {msg && (
-          <div className={`mx-6 mt-3 px-4 py-2 rounded-lg text-sm border ${msg.includes("Error") ? "bg-red-500/5 border-red-500/20 text-red-400" : msg.includes("live") || msg.includes("Posted") || msg.includes("saved") ? "bg-teal/5 border-teal/20 text-teal" : "bg-ink2 border-rim text-text2"}`}>
+          <div className={`mx-6 mt-3 px-4 py-2 rounded-lg text-sm border ${msg.includes("Error") ? "bg-red-500/5 border-red-500/20 text-red-400" : msg.includes("✅") || msg.includes("Posted") || msg.includes("saved") || msg.includes("live") ? "bg-teal/5 border-teal/20 text-teal" : "bg-ink2 border-rim text-text2"}`}>
             {msg}
           </div>
         )}
@@ -216,7 +227,7 @@ export default function MoltbookPage() {
               {!posts.length && !loading && !msg && (
                 <div className="text-center py-12">
                   <p className="text-fog text-sm">Click <span className="text-gold">Load Feed</span> to read posts</p>
-                  <p className="text-fog/50 text-xs mt-1">Save your API key first, then click Test to verify</p>
+                  <p className="text-fog/50 text-xs mt-1">Make sure your API key is saved above</p>
                 </div>
               )}
             </div>
