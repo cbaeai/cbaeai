@@ -1,237 +1,554 @@
+"use client"
+import { useState, useEffect, useRef, useCallback } from "react"
+import Link from "next/link"
+
 const MB = "https://www.moltbook.com/api/v1"
 
 function mbHeaders(key: string) {
-  return {
-    "Authorization": `Bearer ${key}`,
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-  }
+  return { "Authorization": `Bearer ${key}`, "Content-Type": "application/json", "Accept": "application/json" }
 }
 
-// Call moltbook.com directly — no double-proxy, no HTML responses
-async function mbFetch(key: string, path: string, method = "GET", body?: object): Promise<string> {
+async function mbFetch(key: string, path: string, method = "GET", body?: object) {
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 25000)
     const res = await fetch(`${MB}${path}`, {
-      method,
-      headers: mbHeaders(key),
+      method, headers: mbHeaders(key),
       body: body ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
     })
-    clearTimeout(timeout)
-    const text = await res.text()
-    if (text.trim().startsWith("<")) {
-      return JSON.stringify({ error: `Moltbook returned an HTML error page (HTTP ${res.status}). The API may be temporarily down.` })
-    }
-    try {
-      return JSON.stringify(JSON.parse(text))
-    } catch {
-      return JSON.stringify({ error: `Invalid response: ${text.slice(0, 200)}` })
-    }
+    return res.json()
   } catch (e: any) {
-    if (e?.name === "AbortError") return JSON.stringify({ error: "Moltbook timed out after 25s. Try again." })
-    return JSON.stringify({ error: e?.message || "Request failed" })
+    return { error: e?.message || "Request failed" }
   }
 }
 
+type Agent = {
+  name: string
+  description?: string
+  karma?: number
+  follower_count?: number
+  posts?: number
+  upvotes?: number
+  latestTitle?: string
+  latestId?: string
+  is_active?: boolean
+}
 
+type InteractionLog = {
+  id: string
+  ts: Date
+  type: "discover" | "follow" | "comment" | "read" | "profile" | "error"
+  agent?: string
+  detail: string
+}
 
-export async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
-  try {
-    switch (name) {
-      case "web_search":        return await webSearch(args.query as string)
-      case "get_weather":       return await getWeather(args.city as string)
-      case "get_news":          return await getNews(args.topic as string)
-      case "calculator":        return calculator(args.expression as string)
-      case "get_datetime":      return getDatetime()
-      case "save_note":         return saveNote(args.title as string, args.content as string)
-      case "get_note":          return getNote(args.title as string)
-      case "browse_url":        return await browseUrl(args.url as string)
-      case "moltbook_feed":     return await moltbookFeed(args.key as string, args.sort as string, args.limit as number)
-      case "moltbook_post":     return await moltbookPost(args.key as string, args.title as string, args.content as string, args.submolt as string)
-      case "moltbook_search":   return await moltbookSearch(args.key as string, args.query as string)
-      case "moltbook_profile":  return await moltbookProfile(args.key as string)
-      case "moltbook_comment":  return await moltbookComment(args.key as string, args.post_id as string, args.content as string)
-      default:                  return `Unknown tool: ${name}`
+type AutoConfig = {
+  enabled: boolean
+  action: "comment" | "follow" | "both"
+  topic: string
+  interval: number // minutes
+}
+
+export default function AgentsPage() {
+  const [apiKey, setApiKey]           = useState("")
+  const [agents, setAgents]           = useState<Agent[]>([])
+  const [selected, setSelected]       = useState<Agent | null>(null)
+  const [selectedPosts, setSelectedPosts] = useState<any[]>([])
+  const [log, setLog]                 = useState<InteractionLog[]>([])
+  const [loading, setLoading]         = useState(false)
+  const [scanLoading, setScanLoading] = useState(false)
+  const [searchQ, setSearchQ]         = useState("")
+  const [autoConfig, setAutoConfig]   = useState<AutoConfig>({ enabled: false, action: "comment", topic: "", interval: 5 })
+  const [autoRunning, setAutoRunning] = useState(false)
+  const [aiComment, setAiComment]     = useState<Record<string, string>>({})
+  const [commentLoading, setCommentLoading] = useState<string | null>(null)
+  const [msg, setMsg]                 = useState("")
+  const autoRef = useRef<NodeJS.Timeout | null>(null)
+  const logEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const k = localStorage.getItem("mb_key") || ""
+    if (k) setApiKey(k)
+  }, [])
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [log])
+
+  const addLog = useCallback((type: InteractionLog["type"], detail: string, agent?: string) => {
+    setLog(prev => [...prev, { id: Math.random().toString(36).slice(2), ts: new Date(), type, agent, detail }])
+  }, [])
+
+  const scanAgents = async () => {
+    if (!apiKey) { setMsg("Save your API key on the Moltbook page first"); return }
+    setScanLoading(true); setMsg("")
+    addLog("discover", "Scanning feed for active agents…")
+
+    const data = await mbFetch(apiKey, `/feed?sort=new&limit=25`)
+    setScanLoading(false)
+
+    if (data.error) { addLog("error", `Scan failed: ${data.error}`); return }
+
+    const posts = data.posts || []
+    const map = new Map<string, Agent>()
+
+    for (const p of posts) {
+      const name = p.author?.name
+      if (!name) continue
+      if (searchQ && !name.toLowerCase().includes(searchQ.toLowerCase()) &&
+          !p.title?.toLowerCase().includes(searchQ.toLowerCase()) &&
+          !p.content?.toLowerCase().includes(searchQ.toLowerCase())) continue
+
+      if (map.has(name)) {
+        const a = map.get(name)!
+        a.posts = (a.posts || 0) + 1
+        a.upvotes = (a.upvotes || 0) + (p.upvotes ?? 0)
+      } else {
+        map.set(name, {
+          name, posts: 1, upvotes: p.upvotes ?? 0,
+          latestTitle: p.title, latestId: p.id,
+        })
+      }
     }
-  } catch (e) {
-    return `Tool error: ${e}`
+
+    const discovered = [...map.values()].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
+    setAgents(discovered)
+    addLog("discover", `Found ${discovered.length} agents in recent feed${searchQ ? ` matching "${searchQ}"` : ""}`)
   }
-}
 
-// ── Moltbook tools ────────────────────────────────────────────
+  const loadAgentProfile = async (agent: Agent) => {
+    setSelected(agent); setSelectedPosts([])
+    setLoading(true)
+    addLog("profile", `Loading profile for @${agent.name}`, agent.name)
 
-async function moltbookFeed(key: string, sort = "hot", limit = 10): Promise<string> {
-  if (!key) return "No Moltbook API key provided. Ask the user to provide their key."
-  const raw = await mbFetch(key, `/feed?sort=${sort}&limit=${limit}`)
-  const data = JSON.parse(raw)
-  if (data.error) return `Moltbook error: ${data.error}`
-  const posts = data.posts || []
-  if (!posts.length) return "No posts found in feed."
-  return posts.slice(0, limit).map((p: any, i: number) =>
-    `${i+1}. [${p.id}] "${p.title}" by @${p.author?.name} in m/${p.submolt?.name} — ${p.upvotes ?? 0} upvotes\n   ${(p.content || "").slice(0, 120)}...`
-  ).join("\n\n")
-}
+    const [profileData, postsData] = await Promise.all([
+      mbFetch(apiKey, `/agents/${encodeURIComponent(agent.name)}`),
+      mbFetch(apiKey, `/agents/${encodeURIComponent(agent.name)}/posts?limit=5`),
+    ])
+    setLoading(false)
 
-async function moltbookPost(key: string, title: string, content: string, submolt = "general"): Promise<string> {
-  if (!key) return "No Moltbook API key provided."
-  const raw = await mbFetch(key, "/posts", "POST", { submolt, title, content })
-  const data = JSON.parse(raw)
-  if (data.error) return `Failed to post: ${data.error}`
-  // Handle verification challenge if present
-  if (data.post?.verification?.challenge_text) {
-    const challenge = data.post.verification.challenge_text
-    const code = data.post.verification.verification_code
-    // Parse the math challenge — strip obfuscation and extract numbers + operator
-    const clean = challenge.replace(/[^a-zA-Z0-9\s]/g, " ").replace(/\s+/g, " ").toLowerCase()
-    const numMatches = clean.match(/\d+(\.\d+)?/g) || []
-    const nums = numMatches.map(Number)
-    let answer = 0
-    if (clean.includes("add") || clean.includes("plus") || clean.includes("sum")) answer = nums[0] + nums[1]
-    else if (clean.includes("subtract") || clean.includes("minus") || clean.includes("slow") || clean.includes("less")) answer = nums[0] - nums[1]
-    else if (clean.includes("multipl") || clean.includes("times")) answer = nums[0] * nums[1]
-    else if (clean.includes("divid") || clean.includes("per")) answer = nums[0] / nums[1]
-    else answer = nums[0] - nums[1] // default: subtraction (most common in challenges)
-    const answerStr = answer.toFixed(2)
-    const verifyRaw = await mbFetch(key, "/verify", "POST", { verification_code: code, answer: answerStr })
-    const verifyData = JSON.parse(verifyRaw)
-    if (verifyData.success) return `✅ Posted and verified! Title: "${title}" in m/${submolt}`
-    return `Post created but verification failed (tried ${answerStr}). Challenge: ${challenge}`
+    if (!profileData.error) {
+      const a = profileData.agent || profileData
+      setSelected(prev => prev ? { ...prev, description: a.description, karma: a.karma, follower_count: a.follower_count, is_active: a.is_active } : prev)
+    }
+    if (!postsData.error) {
+      setSelectedPosts(postsData.posts || [])
+    }
   }
-  return data.success ? `✅ Posted: "${title}" in m/${submolt}` : `Response: ${raw.slice(0, 200)}`
-}
 
-async function moltbookSearch(key: string, query: string): Promise<string> {
-  if (!key) return "No Moltbook API key provided."
-  const raw = await mbFetch(key, `/search?q=${encodeURIComponent(query)}&type=all&limit=10`)
-  const data = JSON.parse(raw)
-  if (data.error) return `Search error: ${data.error}`
-  const results = data.results || []
-  if (!results.length) return `No results found for: "${query}"`
-  return results.map((r: any, i: number) =>
-    `${i+1}. [${r.type}] "${r.title || r.content?.slice(0,60)}" by @${r.author?.name} — similarity: ${r.similarity?.toFixed(2)}`
-  ).join("\n")
-}
-
-async function moltbookProfile(key: string): Promise<string> {
-  if (!key) return "No Moltbook API key provided."
-  const raw = await mbFetch(key, "/agents/me")
-  const data = JSON.parse(raw)
-  if (data.error) return `Profile error: ${data.error}`
-  const a = data.agent || data
-  return `@${a.name} — ${a.description || "no description"}
-Karma: ${a.karma ?? 0} | Followers: ${a.follower_count ?? 0} | Following: ${a.following_count ?? 0}
-Status: ${a.is_claimed ? "✅ Claimed" : "⏳ Pending"} | Active: ${a.is_active ? "Yes" : "No"}
-Profile: https://www.moltbook.com/u/${a.name}`
-}
-
-async function moltbookComment(key: string, post_id: string, content: string): Promise<string> {
-  if (!key) return "No Moltbook API key provided."
-  const raw = await mbFetch(key, `/posts/${post_id}/comments`, "POST", { content })
-  const data = JSON.parse(raw)
-  if (data.error) return `Comment error: ${data.error}`
-  if (data.comment?.verification?.challenge_text) {
-    return `Comment created but needs verification. Challenge: ${data.comment.verification.challenge_text}`
+  const followAgent = async (name: string) => {
+    addLog("follow", `Following @${name}…`, name)
+    const data = await mbFetch(apiKey, `/agents/${encodeURIComponent(name)}/follow`, "POST")
+    if (data.error) { addLog("error", `Follow failed: ${data.error}`, name); return }
+    addLog("follow", data.success ? `✅ Now following @${name}` : `Response: ${JSON.stringify(data).slice(0,100)}`, name)
   }
-  return data.success ? `✅ Comment posted on post ${post_id}` : `Response: ${raw.slice(0, 200)}`
-}
 
-// ── Existing tools ────────────────────────────────────────────
+  const generateComment = async (post: any) => {
+    const postId = post.id
+    setCommentLoading(postId)
 
-async function webSearch(query: string): Promise<string> {
-  const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`)
-  const data = await res.json()
-  const results = data.RelatedTopics?.slice(0, 5).map((r: any) => r.Text || "").filter(Boolean).join("\n\n")
-  return results || "No results found."
-}
+    // Use the chat API to generate a smart comment
+    try {
+      const mb_key = apiKey
+      const prompt = `Read this Moltbook post and write a thoughtful, genuine comment as an AI agent. Be specific to the content, not generic. Keep it under 3 sentences.
 
-async function getWeather(city: string): Promise<string> {
-  const res = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=3`)
-  return res.text()
-}
+Post title: "${post.title}"
+Author: @${post.author?.name}
+Content: ${(post.content || "").slice(0, 500)}
 
-async function getNews(topic: string): Promise<string> {
-  const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(topic + " news")}&format=json&no_html=1`)
-  const data = await res.json()
-  const results = data.RelatedTopics?.slice(0, 5).map((r: any) => r.Text || "").filter(Boolean).join("\n\n")
-  return results || "No news found."
-}
+Reply with ONLY the comment text, nothing else.`
 
-function calculator(expression: string): string {
-  try {
-    if (!/^[0-9+\-*/().\s%]+$/.test(expression)) return "Invalid expression"
-    const result = Function(`"use strict"; return (${expression})`)()
-    return `= ${result}`
-  } catch {
-    return "Could not evaluate expression"
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: prompt, history: [], agent_mode: false, mb_key }),
+      })
+
+      if (!res.body) throw new Error("No body")
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = "", comment = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          try {
+            const d = JSON.parse(line.slice(6))
+            if (d.type === "token") comment += d.content
+          } catch {}
+        }
+      }
+
+      setAiComment(prev => ({ ...prev, [postId]: comment.trim() }))
+    } catch (e: any) {
+      setMsg(`AI error: ${e.message}`)
+    } finally {
+      setCommentLoading(null)
+    }
   }
+
+  const postComment = async (postId: string) => {
+    const content = aiComment[postId]
+    if (!content) return
+    addLog("comment", `Posting comment on post ${postId.slice(0,8)}…`)
+    const data = await mbFetch(apiKey, `/posts/${postId}/comments`, "POST", { content })
+    if (data.error) { addLog("error", `Comment failed: ${data.error}`); return }
+    addLog("comment", `✅ Comment posted: "${content.slice(0,60)}…"`)
+    setAiComment(prev => { const n = {...prev}; delete n[postId]; return n })
+  }
+
+  // Autonomous mode loop
+  const runAutoLoop = useCallback(async () => {
+    if (!apiKey) { addLog("error", "No API key — set it on the Moltbook page"); return }
+    addLog("discover", `🤖 Auto mode: scanning for agents${autoConfig.topic ? ` interested in "${autoConfig.topic}"` : ""}…`)
+
+    const data = await mbFetch(apiKey, `/feed?sort=new&limit=25`)
+    if (data.error) { addLog("error", `Auto scan failed: ${data.error}`); return }
+
+    const posts = (data.posts || []).filter((p: any) => {
+      if (!autoConfig.topic) return true
+      const t = autoConfig.topic.toLowerCase()
+      return p.title?.toLowerCase().includes(t) || p.content?.toLowerCase().includes(t)
+    })
+
+    if (!posts.length) { addLog("discover", "No matching posts found this cycle."); return }
+
+    // Pick top 2 posts to interact with
+    const targets = posts.slice(0, 2)
+
+    for (const post of targets) {
+      const authorName = post.author?.name
+      if (!authorName) continue
+
+      if (autoConfig.action === "follow" || autoConfig.action === "both") {
+        addLog("follow", `Auto-following @${authorName}…`, authorName)
+        const followData = await mbFetch(apiKey, `/agents/${encodeURIComponent(authorName)}/follow`, "POST")
+        addLog("follow", followData.success ? `✅ Followed @${authorName}` : `Follow result: ${JSON.stringify(followData).slice(0,80)}`, authorName)
+      }
+
+      if (autoConfig.action === "comment" || autoConfig.action === "both") {
+        // Generate AI comment
+        try {
+          const prompt = `Write a thoughtful, genuine comment for this Moltbook post. Be specific. Under 2 sentences. Reply with ONLY the comment.
+
+Title: "${post.title}"
+Content: ${(post.content || "").slice(0, 400)}`
+
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: prompt, history: [], agent_mode: false, mb_key: apiKey }),
+          })
+
+          if (res.body) {
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = "", comment = ""
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split("\n"); buffer = lines.pop() || ""
+              for (const line of lines) {
+                if (!line.startsWith("data: ")) continue
+                try { const d = JSON.parse(line.slice(6)); if (d.type === "token") comment += d.content } catch {}
+              }
+            }
+            const commentText = comment.trim()
+            addLog("comment", `Auto-commenting on "${post.title.slice(0,40)}"…`)
+            const commentData = await mbFetch(apiKey, `/posts/${post.id}/comments`, "POST", { content: commentText })
+            addLog("comment", commentData.success ? `✅ Commented: "${commentText.slice(0,60)}…"` : `Comment result: ${JSON.stringify(commentData).slice(0,80)}`)
+          }
+        } catch (e: any) {
+          addLog("error", `Auto-comment failed: ${e.message}`)
+        }
+      }
+    }
+  }, [apiKey, autoConfig, addLog])
+
+  const toggleAuto = () => {
+    if (autoRunning) {
+      if (autoRef.current) clearInterval(autoRef.current)
+      setAutoRunning(false)
+      addLog("discover", "🛑 Autonomous mode stopped.")
+    } else {
+      setAutoRunning(true)
+      addLog("discover", `🚀 Autonomous mode started (every ${autoConfig.interval} min)`)
+      runAutoLoop()
+      autoRef.current = setInterval(runAutoLoop, autoConfig.interval * 60 * 1000)
+    }
+  }
+
+  useEffect(() => {
+    return () => { if (autoRef.current) clearInterval(autoRef.current) }
+  }, [])
+
+  const logIcon: Record<InteractionLog["type"], string> = {
+    discover: "🔍", follow: "➕", comment: "💬", read: "📖", profile: "👤", error: "⚠️"
+  }
+
+  return (
+    <div className="min-h-screen bg-[#09090e] text-[#eaeaf2] font-sans">
+      {/* Fixed bg gradient */}
+      <div className="fixed inset-0 pointer-events-none z-0" style={{
+        background: "radial-gradient(ellipse 60% 40% at 80% 0%, rgba(78,205,196,0.04) 0%, transparent 60%), radial-gradient(ellipse 50% 35% at 10% 100%, rgba(200,169,110,0.04) 0%, transparent 55%)"
+      }} />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-6">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="font-serif text-3xl text-[#eaeaf2] tracking-tight">Multi-Agent</h1>
+            <p className="text-[#6b6b8a] text-sm mt-1">Discover, follow, and interact with other AI agents on Moltbook</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-xs text-[#6b6b8a] hover:text-[#eaeaf2] border border-[#2e2e40] hover:border-[#3e3e55] rounded-lg px-3 py-1.5 transition-colors">← Chat</Link>
+            <Link href="/moltbook" className="text-xs text-[#6b6b8a] hover:text-[#c8a96e] border border-[#2e2e40] hover:border-[#c8a96e]/30 rounded-lg px-3 py-1.5 transition-colors">⬡ Moltbook</Link>
+          </div>
+        </div>
+
+        {msg && <div className="mb-4 text-xs text-[#c8a96e] bg-[#c8a96e]/10 border border-[#c8a96e]/20 rounded-lg px-4 py-2">{msg}</div>}
+
+        <div className="grid grid-cols-12 gap-5">
+
+          {/* LEFT: Discovery panel */}
+          <div className="col-span-4 space-y-4">
+
+            {/* Scan controls */}
+            <div className="bg-[#111118] border border-[#2e2e40] rounded-xl p-4">
+              <h2 className="text-sm font-semibold text-[#eaeaf2] mb-3">Discover Agents</h2>
+              <div className="flex gap-2 mb-3">
+                <input
+                  value={searchQ}
+                  onChange={e => setSearchQ(e.target.value)}
+                  placeholder="Filter by topic or name…"
+                  className="flex-1 text-xs bg-[#1a1a28] border border-[#2e2e40] rounded-lg px-3 py-2 text-[#eaeaf2] placeholder-[#4a4a60] outline-none focus:border-[#4ecdc4]/40"
+                />
+                <button
+                  onClick={scanAgents}
+                  disabled={scanLoading}
+                  className="text-xs bg-[#4ecdc4]/10 hover:bg-[#4ecdc4]/20 text-[#4ecdc4] border border-[#4ecdc4]/30 rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
+                >
+                  {scanLoading ? "…" : "Scan"}
+                </button>
+              </div>
+              <p className="text-[#4a4a60] text-xs">Scans the latest 25 posts and extracts unique agents</p>
+            </div>
+
+            {/* Agent list */}
+            <div className="bg-[#111118] border border-[#2e2e40] rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#2e2e40] flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-[#eaeaf2]">Agents Found</h2>
+                <span className="text-xs text-[#4ecdc4] bg-[#4ecdc4]/10 px-2 py-0.5 rounded-full">{agents.length}</span>
+              </div>
+              <div className="overflow-y-auto max-h-[420px]">
+                {agents.length === 0 && (
+                  <p className="text-[#4a4a60] text-xs text-center py-8">Hit Scan to discover agents</p>
+                )}
+                {agents.map(a => (
+                  <div
+                    key={a.name}
+                    onClick={() => loadAgentProfile(a)}
+                    className={`px-4 py-3 border-b border-[#1e1e2e] cursor-pointer hover:bg-[#1a1a28] transition-colors ${selected?.name === a.name ? "bg-[#1a1a28] border-l-2 border-l-[#4ecdc4]" : ""}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#c8a96e] text-xs font-semibold">@{a.name}</span>
+                      <span className="text-[#4a4a60] text-xs">{a.upvotes ?? 0} ⬆</span>
+                    </div>
+                    <p className="text-[#6b6b8a] text-xs mt-0.5 truncate">{a.latestTitle || "No posts"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* CENTER: Selected agent detail */}
+          <div className="col-span-5 space-y-4">
+            {!selected ? (
+              <div className="bg-[#111118] border border-[#2e2e40] rounded-xl flex items-center justify-center h-64">
+                <p className="text-[#4a4a60] text-sm">Select an agent to view their profile & posts</p>
+              </div>
+            ) : (
+              <>
+                {/* Profile card */}
+                <div className="bg-[#111118] border border-[#2e2e40] rounded-xl p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-[#c8a96e] font-semibold">@{selected.name}</h3>
+                        {selected.is_active && <span className="text-[10px] text-[#4ecdc4] bg-[#4ecdc4]/10 px-2 py-0.5 rounded-full">Active</span>}
+                      </div>
+                      {selected.description && <p className="text-[#9a9ab8] text-xs mt-1">{selected.description}</p>}
+                    </div>
+                    <button
+                      onClick={() => followAgent(selected.name)}
+                      className="text-xs text-[#4ecdc4] border border-[#4ecdc4]/30 hover:bg-[#4ecdc4]/10 rounded-lg px-3 py-1.5 transition-colors"
+                    >
+                      + Follow
+                    </button>
+                  </div>
+                  {(selected.karma !== undefined || selected.follower_count !== undefined) && (
+                    <div className="flex gap-4 mt-3">
+                      <div className="text-center">
+                        <div className="text-[#eaeaf2] text-sm font-semibold">{selected.karma ?? "?"}</div>
+                        <div className="text-[#4a4a60] text-xs">Karma</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[#eaeaf2] text-sm font-semibold">{selected.follower_count ?? "?"}</div>
+                        <div className="text-[#4a4a60] text-xs">Followers</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[#eaeaf2] text-sm font-semibold">{selected.posts ?? "?"}</div>
+                        <div className="text-[#4a4a60] text-xs">Posts seen</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Posts */}
+                <div className="bg-[#111118] border border-[#2e2e40] rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#2e2e40]">
+                    <h3 className="text-sm font-semibold text-[#eaeaf2]">Recent Posts</h3>
+                  </div>
+                  <div className="overflow-y-auto max-h-[380px]">
+                    {loading && <p className="text-[#4a4a60] text-xs text-center py-6">Loading…</p>}
+                    {!loading && selectedPosts.length === 0 && (
+                      <p className="text-[#4a4a60] text-xs text-center py-6">
+                        {selected.latestId ? "No API posts found, showing from feed below" : "No posts found"}
+                      </p>
+                    )}
+                    {(selectedPosts.length > 0 ? selectedPosts : (selected.latestId ? [{ id: selected.latestId, title: selected.latestTitle, author: { name: selected.name }, upvotes: selected.upvotes }] : [])).map((p: any) => (
+                      <div key={p.id} className="px-4 py-3 border-b border-[#1e1e2e]">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-[#eaeaf2] text-xs font-medium flex-1">{p.title}</p>
+                          <span className="text-[#4a4a60] text-xs shrink-0">{p.upvotes ?? 0} ⬆</span>
+                        </div>
+                        {p.content && <p className="text-[#6b6b8a] text-xs mt-1 line-clamp-2">{p.content}</p>}
+
+                        {/* AI comment generator */}
+                        <div className="mt-2">
+                          {aiComment[p.id] ? (
+                            <div className="bg-[#1a1a28] border border-[#4ecdc4]/20 rounded-lg p-2 mt-1">
+                              <p className="text-[#4ecdc4] text-xs italic">{aiComment[p.id]}</p>
+                              <div className="flex gap-2 mt-2">
+                                <button onClick={() => postComment(p.id)} className="text-xs text-[#4ecdc4] border border-[#4ecdc4]/30 hover:bg-[#4ecdc4]/10 rounded px-2 py-1 transition-colors">Post this</button>
+                                <button onClick={() => setAiComment(prev => { const n={...prev}; delete n[p.id]; return n })} className="text-xs text-[#6b6b8a] border border-[#2e2e40] hover:border-[#3e3e55] rounded px-2 py-1 transition-colors">Discard</button>
+                                <button onClick={() => generateComment(p)} className="text-xs text-[#6b6b8a] border border-[#2e2e40] hover:border-[#3e3e55] rounded px-2 py-1 transition-colors">Regen</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => generateComment(p)}
+                              disabled={commentLoading === p.id}
+                              className="text-xs text-[#6b6b8a] hover:text-[#4ecdc4] border border-[#2e2e40] hover:border-[#4ecdc4]/30 rounded px-2 py-1 transition-colors disabled:opacity-40"
+                            >
+                              {commentLoading === p.id ? "Generating…" : "✦ Generate comment"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* RIGHT: Autonomous mode + log */}
+          <div className="col-span-3 space-y-4">
+
+            {/* Autonomous mode */}
+            <div className="bg-[#111118] border border-[#2e2e40] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-[#eaeaf2]">Autonomous Mode</h2>
+                <button
+                  onClick={toggleAuto}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${autoRunning ? "bg-[#4ecdc4]/30 border border-[#4ecdc4]/50" : "bg-[#2e2e40] border border-[#3e3e55]"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${autoRunning ? "left-5 bg-[#4ecdc4]" : "left-0.5 bg-[#6b6b8a]"}`} />
+                </button>
+              </div>
+
+              {autoRunning && (
+                <div className="flex items-center gap-2 mb-3 bg-[#4ecdc4]/10 border border-[#4ecdc4]/20 rounded-lg px-3 py-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ecdc4] animate-pulse" />
+                  <span className="text-[#4ecdc4] text-xs">Running every {autoConfig.interval}m</span>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-[#6b6b8a] mb-1 block">Topic filter</label>
+                  <input
+                    value={autoConfig.topic}
+                    onChange={e => setAutoConfig(p => ({ ...p, topic: e.target.value }))}
+                    placeholder="e.g. AI, memory, agents…"
+                    disabled={autoRunning}
+                    className="w-full text-xs bg-[#1a1a28] border border-[#2e2e40] rounded-lg px-3 py-2 text-[#eaeaf2] placeholder-[#4a4a60] outline-none focus:border-[#4ecdc4]/40 disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-[#6b6b8a] mb-1 block">Action</label>
+                  <select
+                    value={autoConfig.action}
+                    onChange={e => setAutoConfig(p => ({ ...p, action: e.target.value as any }))}
+                    disabled={autoRunning}
+                    className="w-full text-xs bg-[#1a1a28] border border-[#2e2e40] rounded-lg px-3 py-2 text-[#eaeaf2] outline-none focus:border-[#4ecdc4]/40 disabled:opacity-50"
+                  >
+                    <option value="comment">Comment only</option>
+                    <option value="follow">Follow only</option>
+                    <option value="both">Comment + Follow</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-[#6b6b8a] mb-1 block">Interval (minutes)</label>
+                  <input
+                    type="number" min={1} max={60}
+                    value={autoConfig.interval}
+                    onChange={e => setAutoConfig(p => ({ ...p, interval: parseInt(e.target.value) || 5 }))}
+                    disabled={autoRunning}
+                    className="w-full text-xs bg-[#1a1a28] border border-[#2e2e40] rounded-lg px-3 py-2 text-[#eaeaf2] outline-none focus:border-[#4ecdc4]/40 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[#4a4a60] text-xs mt-3">
+                Cbae will scan the feed and interact with agents automatically while this page is open.
+              </p>
+            </div>
+
+            {/* Interaction log */}
+            <div className="bg-[#111118] border border-[#2e2e40] rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#2e2e40] flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-[#eaeaf2]">Activity Log</h2>
+                {log.length > 0 && (
+                  <button onClick={() => setLog([])} className="text-xs text-[#4a4a60] hover:text-[#6b6b8a] transition-colors">Clear</button>
+                )}
+              </div>
+              <div className="overflow-y-auto max-h-[400px] p-3 space-y-1">
+                {log.length === 0 && <p className="text-[#4a4a60] text-xs text-center py-4">No activity yet</p>}
+                {log.map(entry => (
+                  <div key={entry.id} className="flex gap-2 text-xs">
+                    <span className="shrink-0 text-[10px] mt-0.5">{logIcon[entry.type]}</span>
+                    <div>
+                      {entry.agent && <span className="text-[#c8a96e] mr-1">@{entry.agent}</span>}
+                      <span className={entry.type === "error" ? "text-red-400" : "text-[#6b6b8a]"}>{entry.detail}</span>
+                      <span className="text-[#3a3a55] ml-1">{entry.ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
-
-function getDatetime(): string {
-  return new Date().toLocaleString("en-US", {
-    weekday: "long", year: "numeric", month: "long",
-    day: "numeric", hour: "2-digit", minute: "2-digit"
-  })
-}
-
-const NOTES: Record<string, string> = {}
-
-function saveNote(title: string, content: string): string {
-  NOTES[title] = content
-  return `Note saved: ${title}`
-}
-
-function getNote(title: string): string {
-  const key = Object.keys(NOTES).find(k => k.toLowerCase().includes(title.toLowerCase()))
-  return key ? `${key}:\n${NOTES[key]}` : `No note found for: ${title}`
-}
-
-async function browseUrl(url: string): Promise<string> {
-  const res  = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } })
-  const html = await res.text()
-  const text = html.replace(/<(script|style)[^>]*>[\s\S]*?<\/(script|style)>/gi, "")
-                   .replace(/<[^>]+>/g, " ")
-                   .replace(/\s{2,}/g, "\n")
-                   .trim()
-  return text.slice(0, 3000)
-}
-
-export const TOOLS = [
-  { type: "function", function: { name: "web_search",       description: "Search the web for information",                    parameters: { type: "object", properties: { query:      { type: "string" } }, required: ["query"] }}},
-  { type: "function", function: { name: "get_weather",      description: "Get current weather for a city",                    parameters: { type: "object", properties: { city:       { type: "string" } }, required: ["city"] }}},
-  { type: "function", function: { name: "get_news",         description: "Get latest news on a topic",                        parameters: { type: "object", properties: { topic:      { type: "string" } }, required: ["topic"] }}},
-  { type: "function", function: { name: "calculator",       description: "Evaluate a math expression",                        parameters: { type: "object", properties: { expression: { type: "string" } }, required: ["expression"] }}},
-  { type: "function", function: { name: "get_datetime",     description: "Get current date and time",                         parameters: { type: "object", properties: {} }}},
-  { type: "function", function: { name: "save_note",        description: "Save a note",                                       parameters: { type: "object", properties: { title: { type: "string" }, content: { type: "string" } }, required: ["title","content"] }}},
-  { type: "function", function: { name: "get_note",         description: "Retrieve a saved note",                             parameters: { type: "object", properties: { title: { type: "string" } }, required: ["title"] }}},
-  { type: "function", function: { name: "browse_url",       description: "Fetch and read a webpage",                         parameters: { type: "object", properties: { url:        { type: "string" } }, required: ["url"] }}},
-  { type: "function", function: { name: "moltbook_feed",    description: "Read posts from Moltbook feed. Sort options: hot, new, top, rising.",
-    parameters: { type: "object", properties: {
-      key:   { type: "string", description: "Moltbook API key" },
-      sort:  { type: "string", description: "Sort order: hot, new, top, rising", default: "hot" },
-      limit: { type: "number", description: "Number of posts to fetch (max 25)", default: 10 },
-    }, required: ["key"] }}},
-  { type: "function", function: { name: "moltbook_post",    description: "Create a new post on Moltbook as the AI agent.",
-    parameters: { type: "object", properties: {
-      key:     { type: "string", description: "Moltbook API key" },
-      title:   { type: "string", description: "Post title" },
-      content: { type: "string", description: "Post content" },
-      submolt: { type: "string", description: "Community to post in (default: general)", default: "general" },
-    }, required: ["key","title","content"] }}},
-  { type: "function", function: { name: "moltbook_search",  description: "Semantic search across Moltbook posts and comments.",
-    parameters: { type: "object", properties: {
-      key:   { type: "string", description: "Moltbook API key" },
-      query: { type: "string", description: "Search query (natural language)" },
-    }, required: ["key","query"] }}},
-  { type: "function", function: { name: "moltbook_profile", description: "Get the Moltbook agent profile and stats.",
-    parameters: { type: "object", properties: {
-      key: { type: "string", description: "Moltbook API key" },
-    }, required: ["key"] }}},
-  { type: "function", function: { name: "moltbook_comment", description: "Post a comment on a Moltbook post.",
-    parameters: { type: "object", properties: {
-      key:     { type: "string", description: "Moltbook API key" },
-      post_id: { type: "string", description: "The post ID to comment on" },
-      content: { type: "string", description: "Comment content" },
-    }, required: ["key","post_id","content"] }}},
-]
