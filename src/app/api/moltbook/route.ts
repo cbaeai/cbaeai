@@ -42,10 +42,43 @@ export async function GET(req: NextRequest) {
   }
 
   if (action === "search") {
-    const q    = searchParams.get("q")    || ""
-    const type = searchParams.get("type") || "all"
+    const q     = searchParams.get("q")     || ""
+    const type  = searchParams.get("type")  || "all"
     const limit = searchParams.get("limit") || "10"
     return safeRequest(() => fetch(`${MB}/search?q=${encodeURIComponent(q)}&type=${type}&limit=${limit}`, { headers: headers(key), signal: AbortSignal.timeout(15000) }))
+  }
+
+  // ── Multi-agent endpoints ─────────────────────────────────────
+
+  if (action === "agent-profile") {
+    const name = searchParams.get("name") || ""
+    if (!name) return NextResponse.json({ error: "name param required" })
+    return safeRequest(() => fetch(`${MB}/agents/${encodeURIComponent(name)}`, { headers: headers(key), signal: AbortSignal.timeout(15000) }))
+  }
+
+  if (action === "agent-posts") {
+    const name  = searchParams.get("name")  || ""
+    const limit = searchParams.get("limit") || "10"
+    if (!name) return NextResponse.json({ error: "name param required" })
+    return safeRequest(() => fetch(`${MB}/agents/${encodeURIComponent(name)}/posts?limit=${limit}`, { headers: headers(key), signal: AbortSignal.timeout(15000) }))
+  }
+
+  if (action === "post-detail") {
+    const postId = searchParams.get("post_id") || ""
+    if (!postId) return NextResponse.json({ error: "post_id param required" })
+    return safeRequest(() => fetch(`${MB}/posts/${postId}`, { headers: headers(key), signal: AbortSignal.timeout(15000) }))
+  }
+
+  if (action === "post-comments") {
+    const postId = searchParams.get("post_id") || ""
+    const limit  = searchParams.get("limit")   || "20"
+    if (!postId) return NextResponse.json({ error: "post_id param required" })
+    return safeRequest(() => fetch(`${MB}/posts/${postId}/comments?limit=${limit}`, { headers: headers(key), signal: AbortSignal.timeout(15000) }))
+  }
+
+  if (action === "agents-list") {
+    const limit = searchParams.get("limit") || "20"
+    return safeRequest(() => fetch(`${MB}/agents?limit=${limit}`, { headers: headers(key), signal: AbortSignal.timeout(15000) }))
   }
 
   return NextResponse.json({ error: "Unknown action" })
@@ -82,6 +115,26 @@ export async function POST(req: NextRequest) {
   if (action === "upvote") {
     const postId = searchParams.get("post_id") || ""
     return safeRequest(() => fetch(`${MB}/posts/${postId}/upvote`, {
+      method: "POST", headers: headers(key),
+      signal: AbortSignal.timeout(15000),
+    }))
+  }
+
+  // ── Multi-agent POST endpoints ────────────────────────────────
+
+  if (action === "follow") {
+    const name = searchParams.get("name") || ""
+    if (!name) return NextResponse.json({ error: "name param required" })
+    return safeRequest(() => fetch(`${MB}/agents/${encodeURIComponent(name)}/follow`, {
+      method: "POST", headers: headers(key),
+      signal: AbortSignal.timeout(15000),
+    }))
+  }
+
+  if (action === "unfollow") {
+    const name = searchParams.get("name") || ""
+    if (!name) return NextResponse.json({ error: "name param required" })
+    return safeRequest(() => fetch(`${MB}/agents/${encodeURIComponent(name)}/unfollow`, {
       method: "POST", headers: headers(key),
       signal: AbortSignal.timeout(15000),
     }))
