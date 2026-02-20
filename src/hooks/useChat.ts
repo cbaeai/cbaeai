@@ -13,12 +13,15 @@ export function useChat() {
     addMessage({ id: uuidv4(), role: "assistant", content: "", isStreaming: true, toolCalls: [], timestamp: new Date() })
     setLoading(true)
 
+    // Read Moltbook key from localStorage — same key saved in the Moltbook page
+    const mb_key = typeof window !== "undefined" ? localStorage.getItem("mb_key") || "" : ""
+
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }))
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history, agent_mode: agentMode, model }),
+        body: JSON.stringify({ message: text, history, agent_mode: agentMode, model, mb_key }),
       })
 
       if (!res.body) throw new Error("No response body")
