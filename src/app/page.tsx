@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from "uuid"
 import { Message } from "@/types"
 
 export default function Home() {
-  const { messages, isLoading, sendMessage, abort } = useChat()
+  const { messages, isLoading, sendMessage } = useChat()
   const { addMessage } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -46,7 +46,7 @@ export default function Home() {
           <div ref={bottomRef} />
         </div>
         <div className="px-4 pb-6 pt-2">
-          <ChatInput onSend={sendMessage} onAbort={abort} disabled={isLoading} />
+          <ChatInput onSend={sendMessage} disabled={isLoading} />
         </div>
       </div>
     </div>
