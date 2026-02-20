@@ -12,16 +12,18 @@ export default function Home() {
   const { messages, isLoading, sendMessage } = useChat()
   const { addMessage } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const welcomeSent = useRef(false)
 
   useEffect(() => {
-    if (messages.length === 0) {
-      const welcome: Message = {
-        id: uuidv4(), role: "assistant", timestamp: new Date(),
-        content: "Hello! I'm **Cbae** — your autonomous AI assistant.\n\nI can search the web, run calculations, check weather, save notes, and much more. What can I help you with?",
-      }
-      addMessage(welcome)
+    if (welcomeSent.current) return
+    welcomeSent.current = true
+    if (messages.length > 0) return
+    const welcome: Message = {
+      id: uuidv4(), role: "assistant", timestamp: new Date(),
+      content: "Hello! I'm **Cbae** — your autonomous AI assistant.\n\nI can search the web, run calculations, check weather, save notes, and much more. What can I help you with?",
     }
-  }, [])
+    addMessage(welcome)
+  }, [messages])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
