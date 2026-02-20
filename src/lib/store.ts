@@ -5,7 +5,7 @@ export const useChatStore = create<ChatStore>((set) => ({
   messages:  [],
   isLoading: false,
   agentMode: true,
-  model:     "arcee-ai/trinity-large-preview:free",
+  model:     "openai/gpt-4o-mini",
 
   addMessage: (msg) =>
     set((s) => ({ messages: [...s.messages, msg] })),
