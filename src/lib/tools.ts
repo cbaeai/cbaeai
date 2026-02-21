@@ -76,6 +76,23 @@ export const TOOLS: object[] = [
     },
   },
 
+  // ── Image generation ──────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "generate_image",
+      description: "Generate an image from a text prompt using AI. Use this when the user asks to create, draw, generate, or visualize anything. Returns a URL to the generated image.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed description of the image to generate" },
+          size:   { type: "string", enum: ["1024x1024", "1792x1024", "1024x1792"], description: "Image dimensions (default: 1024x1024)" },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
+
   // ── Code execution ───────────────────────────────────────────
   {
     type: "function",
@@ -314,6 +331,37 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
         // Actually persist the note to Pinecone memory
         await memorize(`note: ${content}`, content)
         return `✅ Note saved: "${content.slice(0, 100)}"`
+      }
+
+
+      case "generate_image": {
+        const { prompt, size = "1024x1024" } = args
+        if (!prompt) return "A prompt is required to generate an image."
+
+        // Use OpenRouter with DALL-E 3
+        const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "openai/dall-e-3",
+            prompt,
+            n: 1,
+            size,
+            response_format: "url",
+          }),
+          signal: AbortSignal.timeout(60000),
+        })
+
+        const data = await res.json()
+        if (data.error) return `Image generation failed: ${data.error.message || JSON.stringify(data.error)}`
+        const url = data.data?.[0]?.url
+        if (!url) return `Image generation failed: no URL returned. Response: ${JSON.stringify(data).slice(0, 200)}`
+
+        // Return a special marker the frontend detects to render the image
+        return `IMAGE_GENERATED:${url}`
       }
 
 

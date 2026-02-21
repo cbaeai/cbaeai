@@ -37,6 +37,7 @@ export interface Message {
   isStreaming?: boolean
   timestamp: Date
   attachment?: Attachment  // replaces the old `image` field
+  generatedImageUrl?: string  // image gen tool result
 }
 
 // Store type lives in src/lib/store.ts

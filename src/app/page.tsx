@@ -79,7 +79,7 @@ function WelcomeScreen({ onSend }: { onSend: (text: string) => void }) {
 }
 
 export default function Home() {
-  const { isLoading, sendMessage } = useChat()
+  const { isLoading, sendMessage, regenerate } = useChat()
   const { conversations, activeId } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -106,7 +106,14 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto py-4">
           {messages.length === 0
             ? <WelcomeScreen onSend={sendMessage} />
-            : messages.map(msg => <ChatMessage key={msg.id} msg={msg} />)
+            : messages.map((msg, i) => (
+              <ChatMessage
+                key={msg.id}
+                msg={msg}
+                isLast={i === messages.length - 1}
+                onRegenerate={regenerate}
+              />
+            ))
           }
           <div ref={bottomRef} />
         </div>

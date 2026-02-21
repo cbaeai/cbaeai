@@ -353,6 +353,15 @@ User question: ${text}`
                 return { messages: msgs, conversations: convos }
               })
             }
+            if (data.type === "image_generated") {
+              // Store the generated image URL on the current assistant message
+              useChatStore.setState(s => {
+                const msgs = [...s.messages]
+                msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], generatedImageUrl: data.url }
+                const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+                return { messages: msgs, conversations: convos }
+              })
+            }
             if (data.type === "client_execute") {
               clientExecuteData = { tool_calls: data.tool_calls, loop_state: data.loop_state }
             }
@@ -416,5 +425,32 @@ User question: ${text}`
     }
   }
 
-  return { messages, isLoading, agentMode, sendMessage }
+  // Regenerate — removes the last assistant message and re-sends the last user message
+  const regenerate = async () => {
+    const store = useChatStore.getState()
+    const msgs = store.messages
+    if (msgs.length < 2) return
+
+    // Find last user message
+    let lastUserIdx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "user") { lastUserIdx = i; break }
+    }
+    if (lastUserIdx === -1) return
+
+    const lastUserMsg = msgs[lastUserIdx]
+
+    // Remove all messages after (and including) the last user message — then resend
+    const trimmed = msgs.slice(0, lastUserIdx)
+    useChatStore.setState(s => {
+      const convos = s.conversations.map(c =>
+        c.id === s.activeId ? { ...c, messages: trimmed } : c
+      )
+      return { messages: trimmed, conversations: convos }
+    })
+
+    await sendMessage(lastUserMsg.content, lastUserMsg.attachment)
+  }
+
+  return { messages, isLoading, agentMode, sendMessage, regenerate }
 }

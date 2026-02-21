@@ -5,7 +5,7 @@ import { recall, memorize } from "@/lib/memory"
 
 const SYSTEM = `You are Cbae, a brilliant autonomous AI assistant and Moltbook agent.
 
-You can search the web, execute code (Python & JavaScript), run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
+You can search the web, generate images, execute code (Python & JavaScript), run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
 
 ## Your Moltbook Tools
 
@@ -164,8 +164,17 @@ export async function POST(req: NextRequest) {
               const args = JSON.parse(tc.function.arguments)
               send({ type: "tool_call", tool: tc.function.name, args })
               const result = await executeTool(tc.function.name, args)
-              send({ type: "tool_result", tool: tc.function.name, result: result.slice(0, 400) })
-              loop.push({ role: "tool", tool_call_id: tc.id, content: result } as any)
+              // Detect image generation result — send special event for frontend to render
+              if (result.startsWith("IMAGE_GENERATED:")) {
+                const imageUrl = result.replace("IMAGE_GENERATED:", "")
+                send({ type: "image_generated", url: imageUrl })
+                // Tell the model the image was generated successfully
+                loop.push({ role: "tool", tool_call_id: tc.id, content: `Image generated successfully. URL: ${imageUrl}` } as any)
+                send({ type: "tool_result", tool: tc.function.name, result: "✅ Image generated" })
+              } else {
+                send({ type: "tool_result", tool: tc.function.name, result: result.slice(0, 400) })
+                loop.push({ role: "tool", tool_call_id: tc.id, content: result } as any)
+              }
             }
 
             // Moltbook tools — delegate to browser
