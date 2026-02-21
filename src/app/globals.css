@@ -42,3 +42,8 @@ body { background: #09090e; color: #eaeaf2; font-family: 'DM Sans', sans-serif; 
 .thinking-ring { animation: spin-arc 1.4s linear infinite; }
 .thinking-ring-inner { animation: spin-arc-inner 2.2s linear infinite; }
 .thinking-appear { animation: thinking-fade-in 0.25s cubic-bezier(0.16,1,0.3,1) both; }
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}

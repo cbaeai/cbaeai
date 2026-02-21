@@ -4,6 +4,7 @@ import { Header }       from "@/components/Header"
 import { Sidebar }      from "@/components/Sidebar"
 import { ChatMessage }  from "@/components/ChatMessage"
 import { ChatInput }    from "@/components/ChatInput"
+import { CbaeLogo }     from "@/components/CbaeLogo"
 import { useChat }      from "@/hooks/useChat"
 import { useChatStore } from "@/lib/store"
 import { v4 as uuidv4 } from "uuid"
@@ -27,22 +28,26 @@ function initStore() {
 }
 
 const SUGGESTIONS = [
-  { icon: "🔍", label: "Search the web",     prompt: "What are the biggest AI breakthroughs this week?" },
-  { icon: "🐍", label: "Run Python code",    prompt: "Write and run a Python script that generates the first 20 Fibonacci numbers" },
-  { icon: "📄", label: "Analyze a file",     prompt: "I'll attach a file — analyze it and summarize the key points" },
-  { icon: "🧠", label: "Deep reasoning",     prompt: "Explain the difference between RAG and fine-tuning for LLMs, with pros and cons of each" },
+  { icon: "🔍", label: "Search the web",    prompt: "What are the biggest AI breakthroughs this week?" },
+  { icon: "🐍", label: "Run Python code",   prompt: "Write and run a Python script that generates the first 20 Fibonacci numbers" },
+  { icon: "📄", label: "Analyze a file",    prompt: "I'll attach a file — analyze it and summarize the key points" },
+  { icon: "🧠", label: "Deep reasoning",    prompt: "Explain the difference between RAG and fine-tuning for LLMs, with pros and cons" },
 ]
 
 function WelcomeScreen({ onSend }: { onSend: (text: string) => void }) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-6 pb-16 select-none">
-      {/* Logo mark */}
-      <div className="relative mb-6">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold via-amber-600 to-amber-800 flex items-center justify-center shadow-[0_0_40px_rgba(200,169,110,0.25)]">
-          <span className="text-2xl text-ink font-bold">✦</span>
-        </div>
-        {/* Glow ring */}
-        <div className="absolute inset-0 rounded-2xl ring-1 ring-gold/20 scale-110" />
+      {/* Animated logo mark */}
+      <div className="relative mb-7 flex items-center justify-center">
+        {/* Outer glow ring */}
+        <div className="absolute w-28 h-28 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(74,126,195,0.18) 0%, transparent 70%)", animation: "pulse-glow 3s ease-in-out infinite" }}
+        />
+        {/* Mid glow */}
+        <div className="absolute w-20 h-20 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(74,126,195,0.12) 0%, transparent 70%)", animation: "pulse-glow 3s ease-in-out infinite 0.5s" }}
+        />
+        <CbaeLogo size={72} />
       </div>
 
       {/* Heading */}
@@ -50,7 +55,7 @@ function WelcomeScreen({ onSend }: { onSend: (text: string) => void }) {
         How can I help you?
       </h2>
       <p className="text-fog text-sm mb-10 text-center max-w-xs leading-relaxed">
-        I can search the web, run code, read files, and think through complex problems.
+        I can search the web, run code, read files,<br/>and think through complex problems.
       </p>
 
       {/* Suggestion chips */}
@@ -59,7 +64,7 @@ function WelcomeScreen({ onSend }: { onSend: (text: string) => void }) {
           <button
             key={s.prompt}
             onClick={() => onSend(s.prompt)}
-            className="group flex items-start gap-3 px-4 py-3.5 rounded-xl border border-rim hover:border-gold/30 bg-ink2 hover:bg-ink3 transition-all text-left"
+            className="group flex items-start gap-3 px-4 py-3.5 rounded-xl border border-rim hover:border-[#4a7ec3]/40 bg-ink2 hover:bg-ink3 transition-all text-left"
           >
             <span className="text-xl mt-0.5 group-hover:scale-110 transition-transform">{s.icon}</span>
             <div>
@@ -90,7 +95,7 @@ export default function Home() {
   return (
     <div className="flex flex-col h-screen bg-ink">
       <div className="fixed inset-0 pointer-events-none z-0" style={{
-        background: "radial-gradient(ellipse 70% 45% at 15% -5%, rgba(200,169,110,0.07) 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 85% 105%, rgba(78,205,196,0.04) 0%, transparent 50%)"
+        background: "radial-gradient(ellipse 70% 45% at 15% -5%, rgba(74,126,195,0.06) 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 85% 105%, rgba(42,95,168,0.04) 0%, transparent 50%)"
       }} />
 
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />

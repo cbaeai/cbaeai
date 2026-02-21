@@ -1,5 +1,6 @@
 "use client"
 import { useState } from "react"
+import { CbaeLogo } from "./CbaeLogo"
 import { Message } from "@/types"
 import { MarkdownRenderer } from "./MarkdownRenderer"
 import { ToolCallBadge } from "./ToolCallBadge"
@@ -94,10 +95,10 @@ export function ChatMessage({ msg }: { msg: Message }) {
       <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-bold
         ${isUser
           ? "bg-ink3 border border-rim2 text-mist"
-          : "bg-gradient-to-br from-gold to-amber-700 text-ink"
+          : "bg-[#0d1a2e] border border-[#1e3d6e]"
         }`}
       >
-        {isUser ? "U" : "✦"}
+        {isUser ? "U" : <CbaeLogo size={22} />}
       </div>
 
       {/* Content */}

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="triGrad" x1="50" y1="8" x2="50" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5b8fd4"/>
+      <stop offset="100%" stop-color="#2a5fa8"/>
+    </linearGradient>
+    <linearGradient id="innerGrad" x1="50" y1="20" x2="50" y2="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4a7ec3"/>
+      <stop offset="100%" stop-color="#1e4d96"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Outer triangle -->
+  <path d="M50 6 L94 88 L6 88 Z" fill="url(#triGrad)" stroke="#1a3d7a" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Inner triangle (inset) -->
+  <path d="M50 16 L84 80 L16 80 Z" fill="url(#innerGrad)" stroke="#1a3d7a" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Horizontal divider line -->
+  <line x1="26" y1="68" x2="74" y2="68" stroke="#1a3d7a" stroke-width="1.5"/>
+
+  <!-- Circle -->
+  <circle cx="50" cy="60" r="10" fill="#1a3d7a" stroke="#3a6dbb" stroke-width="1.5"/>
+  <circle cx="50" cy="60" r="6" fill="#4a7ec3" opacity="0.6"/>
+
+  <!-- Stem down from circle to bottom -->
+  <line x1="50" y1="70" x2="50" y2="80" stroke="#1a3d7a" stroke-width="2"/>
+</svg>
