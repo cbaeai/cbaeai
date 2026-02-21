@@ -262,12 +262,11 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
         const query = encodeURIComponent(args.query || "")
         const count = Math.min(args.count || 6, 9)
         const res = await fetch(
-          `https://api.search.brave.com/res/v1/images/search?q=${query}&count=${count}&safesearch=moderate`,
+          `https://api.unsplash.com/search/photos?query=${query}&per_page=${count}&orientation=squarish`,
           {
             headers: {
-              "Accept": "application/json",
-              "Accept-Encoding": "gzip",
-              "X-Subscription-Token": process.env.BRAVE_KEY || "",
+              "Authorization": `Client-ID ${process.env.UNSPLASH_KEY || ""}`,
+              "Accept-Version": "v1",
             },
           }
         )
@@ -275,10 +274,10 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
         const results = data.results || []
         if (!results.length) return `SEARCH_IMAGES_EMPTY:No images found for: "${args.query}"`
         const images = results.slice(0, count).map((r: any) => ({
-          url: r.properties?.url || r.url || "",
-          thumbnail: r.thumbnail?.src || r.properties?.url || "",
-          title: r.title || "",
-          source: r.source || r.meta_url?.hostname || "",
+          url: r.urls?.regular || r.urls?.full || "",
+          thumbnail: r.urls?.small || r.urls?.thumb || "",
+          title: r.alt_description || r.description || args.query,
+          source: r.user?.name ? `Photo by ${r.user.name} on Unsplash` : "Unsplash",
         }))
         return `SEARCH_IMAGES:${JSON.stringify(images)}`
       }
