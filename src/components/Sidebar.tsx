@@ -15,9 +15,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
-function ConvoItem({
-  convo, isActive, onSwitch, onDelete, onRename,
-}: {
+function ConvoItem({ convo, isActive, onSwitch, onDelete, onRename }: {
   convo: Conversation
   isActive: boolean
   onSwitch: () => void
@@ -28,9 +26,9 @@ function ConvoItem({
   const [draft, setDraft] = useState(convo.title)
   const [hovering, setHovering] = useState(false)
 
-  const commitRename = () => {
-    const trimmed = draft.trim()
-    if (trimmed && trimmed !== convo.title) onRename(trimmed)
+  const commit = () => {
+    const t = draft.trim()
+    if (t && t !== convo.title) onRename(t)
     setEditing(false)
   }
 
@@ -38,57 +36,49 @@ function ConvoItem({
     <div
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
-      className={`group relative flex items-start gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all ${
-        isActive
-          ? "bg-rim2 border border-rim2"
-          : "hover:bg-ink3 border border-transparent"
-      }`}
       onClick={() => !editing && onSwitch()}
+      className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm select-none ${
+        isActive ? "bg-[#2f2f2f] text-[#ececec]" : "text-[#b4b4b4] hover:bg-[#252525] hover:text-[#ececec]"
+      }`}
     >
-      {/* Active indicator */}
-      {isActive && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-gold rounded-full" />
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === "Enter") commit()
+            if (e.key === "Escape") { setDraft(convo.title); setEditing(false) }
+            e.stopPropagation()
+          }}
+          onClick={e => e.stopPropagation()}
+          className="flex-1 bg-[#3a3a3a] text-[#ececec] text-sm rounded px-2 py-0.5 outline-none border border-[#555] min-w-0"
+        />
+      ) : (
+        <span className="flex-1 truncate min-w-0">{convo.title}</span>
       )}
 
-      <div className="flex-1 min-w-0 pl-1">
-        {editing ? (
-          <input
-            autoFocus
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={e => {
-              if (e.key === "Enter") commitRename()
-              if (e.key === "Escape") { setDraft(convo.title); setEditing(false) }
-              e.stopPropagation()
-            }}
-            onClick={e => e.stopPropagation()}
-            className="w-full bg-rim2 text-text1 text-xs rounded px-1.5 py-0.5 outline-none border border-gold/40"
-          />
-        ) : (
-          <p className={`text-xs truncate leading-5 ${isActive ? "text-text1" : "text-text2"}`}>
-            {convo.title}
-          </p>
-        )}
-        <p className="text-[10px] text-fog mt-0.5">{timeAgo(convo.updatedAt)}</p>
-      </div>
-
-      {/* Action buttons — show on hover */}
       {(hovering || isActive) && !editing && (
-        <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => { setDraft(convo.title); setEditing(true) }}
-            className="text-fog hover:text-mist text-[11px] px-1 py-0.5 rounded transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[#8e8e8e] hover:text-[#ececec] hover:bg-[#3a3a3a] transition-colors"
             title="Rename"
           >
-            ✎
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
           </button>
           <button
             onClick={onDelete}
-            className="text-fog hover:text-red-400 text-[11px] px-1 py-0.5 rounded transition-colors"
+            className="w-6 h-6 rounded flex items-center justify-center text-[#8e8e8e] hover:text-red-400 hover:bg-[#3a3a3a] transition-colors"
             title="Delete"
           >
-            ✕
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+            </svg>
           </button>
         </div>
       )}
@@ -97,64 +87,54 @@ function ConvoItem({
 }
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const {
-    conversations, activeId,
-    newConversation, switchConversation, deleteConversation, renameConversation,
-  } = useChatStore()
+  const { conversations, activeId, newConversation, switchConversation, deleteConversation, renameConversation } = useChatStore()
 
-  const handleNew = () => {
-    newConversation()
-    onClose()
-  }
-
-  const handleSwitch = (id: string) => {
-    switchConversation(id)
-    onClose()
-  }
+  const handleNew = () => { newConversation(); onClose() }
+  const handleSwitch = (id: string) => { switchConversation(id); onClose() }
 
   return (
     <>
-      {/* Backdrop */}
       {open && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[2px]"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 z-30 bg-black/50" onClick={onClose} />
       )}
 
-      {/* Sidebar panel */}
-      <div
-        className={`fixed left-0 top-0 bottom-0 z-40 w-72 bg-ink2 border-r border-rim flex flex-col transition-transform duration-200 ease-out ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
+      <div className={`fixed left-0 top-0 bottom-0 z-40 flex flex-col transition-transform duration-200 ease-out
+        bg-[#171717] border-r border-[#2a2a2a] w-[260px]
+        ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-rim">
-          <span className="font-serif text-lg text-text1">Conversations</span>
+        <div className="flex items-center justify-between px-3 pt-4 pb-2">
+          <span className="text-sm font-semibold text-[#ececec]">Cbae</span>
           <button
             onClick={onClose}
-            className="text-fog hover:text-mist text-lg leading-none transition-colors"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-[#8e8e8e] hover:text-[#ececec] hover:bg-[#2a2a2a] transition-colors"
           >
-            ✕
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
           </button>
         </div>
 
-        {/* New chat button */}
-        <div className="px-3 py-3">
+        {/* New chat */}
+        <div className="px-2 pb-2">
           <button
             onClick={handleNew}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-rim hover:border-gold/40 hover:bg-ink3 text-xs text-mist hover:text-gold transition-all"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#b4b4b4] hover:text-[#ececec] hover:bg-[#252525] transition-colors"
           >
-            <span className="text-base leading-none">+</span>
-            New conversation
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            New chat
           </button>
         </div>
 
-        {/* List */}
+        <div className="mx-3 border-t border-[#2a2a2a] mb-2" />
+
+        {/* Conversation list */}
         <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
           {conversations.length === 0 ? (
-            <p className="text-xs text-fog text-center mt-8 px-4">
-              No conversations yet.<br />Start chatting to create one.
+            <p className="text-xs text-[#8e8e8e] text-center mt-8 px-4 leading-relaxed">
+              No conversations yet.<br/>Start chatting!
             </p>
           ) : (
             conversations.map(c => (
@@ -171,8 +151,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-rim">
-          <p className="text-[10px] text-fog text-center">
+        <div className="px-3 py-3 border-t border-[#2a2a2a]">
+          <p className="text-[11px] text-[#8e8e8e]">
             {conversations.length} conversation{conversations.length !== 1 ? "s" : ""}
           </p>
         </div>

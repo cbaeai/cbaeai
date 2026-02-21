@@ -4,45 +4,45 @@ import { useChatStore } from "@/lib/store"
 import { CbaeLogo } from "./CbaeLogo"
 
 const MODELS = [
-  "openai/gpt-4o-mini",
-  "openai/gpt-4o",
-  "anthropic/claude-3-haiku",
-  "anthropic/claude-3.5-sonnet",
-  "google/gemini-flash-1.5",
-  "google/gemini-pro-1.5",
-  "mistralai/mistral-small",
-  "meta-llama/llama-3.3-70b-instruct",
-  "arcee-ai/trinity-large-preview:free",
+  { id: "openai/gpt-4o-mini",                        label: "GPT-4o mini" },
+  { id: "openai/gpt-4o",                             label: "GPT-4o" },
+  { id: "anthropic/claude-3-haiku",                  label: "Claude 3 Haiku" },
+  { id: "anthropic/claude-3.5-sonnet",               label: "Claude 3.5 Sonnet" },
+  { id: "google/gemini-flash-1.5",                   label: "Gemini Flash 1.5" },
+  { id: "google/gemini-pro-1.5",                     label: "Gemini Pro 1.5" },
+  { id: "mistralai/mistral-small",                   label: "Mistral Small" },
+  { id: "meta-llama/llama-3.3-70b-instruct",         label: "Llama 3.3 70B" },
+  { id: "arcee-ai/trinity-large-preview:free",        label: "Trinity Large" },
 ]
 
 export function Header({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const { agentMode, model, setModel, newConversation } = useChatStore()
 
   return (
-    <div className="flex items-center justify-between px-4 py-3.5 border-b border-rim">
-      {/* Left: sidebar toggle + logo + name */}
-      <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between px-4 h-14 border-b border-[#2a2a2a] flex-shrink-0">
+      {/* Left */}
+      <div className="flex items-center gap-2">
         <button
           onClick={onOpenSidebar}
-          className="flex flex-col gap-1 p-1.5 rounded-md hover:bg-ink3 transition-colors group"
-          title="Conversations"
+          className="w-8 h-8 rounded-md flex items-center justify-center text-[#8e8e8e] hover:text-[#ececec] hover:bg-[#2a2a2a] transition-colors"
+          title="Open sidebar"
         >
-          <span className="block w-4 h-px bg-fog group-hover:bg-mist transition-colors" />
-          <span className="block w-4 h-px bg-fog group-hover:bg-mist transition-colors" />
-          <span className="block w-3 h-px bg-fog group-hover:bg-mist transition-colors" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
         </button>
 
-        <div className="flex items-center gap-2.5">
-          <CbaeLogo size={28} />
-          <div>
-            <h1 className="font-serif text-xl text-text1 tracking-tight leading-none">Cbae</h1>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${agentMode ? "bg-teal shadow-[0_0_6px_#4ecdc4]" : "bg-fog"}`} />
-              <span className={`text-[11px] tracking-wide ${agentMode ? "text-teal" : "text-fog"}`}>
-                {agentMode ? "Agent · tools active" : "Direct · fast mode"}
-              </span>
-            </div>
-          </div>
+        <div className="flex items-center gap-2 ml-1">
+          <CbaeLogo size={22} />
+          <span className="font-semibold text-[#ececec] text-sm">Cbae</span>
+          {agentMode && (
+            <span className="flex items-center gap-1 text-[11px] text-[#4ecdc4] bg-[#4ecdc4]/10 border border-[#4ecdc4]/20 rounded-full px-2 py-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4ecdc4] animate-pulse" />
+              Agent
+            </span>
+          )}
         </div>
       </div>
 
@@ -51,23 +51,27 @@ export function Header({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         <select
           value={model}
           onChange={e => setModel(e.target.value)}
-          className="text-xs text-mist bg-ink3 border border-rim rounded-lg px-2 py-1.5 outline-none focus:border-[#4a7ec3]/50 cursor-pointer"
+          className="text-xs text-[#b4b4b4] bg-transparent border border-[#3a3a3a] rounded-lg px-2.5 py-1.5 outline-none hover:border-[#555] focus:border-[#555] cursor-pointer transition-colors"
         >
           {MODELS.map(m => (
-            <option key={m} value={m}>{m.split("/")[1]?.split(":")[0] || m}</option>
+            <option key={m.id} value={m.id} className="bg-[#2a2a2a]">{m.label}</option>
           ))}
         </select>
 
         <button
           onClick={() => newConversation()}
-          className="text-xs text-fog hover:text-mist border border-rim hover:border-rim2 rounded-lg px-3 py-1.5 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-[#b4b4b4] hover:text-[#ececec] border border-[#3a3a3a] hover:border-[#555] rounded-lg px-2.5 py-1.5 transition-colors"
+          title="New chat"
         >
-          + New
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          New
         </button>
 
         <Link
           href="/moltbook"
-          className="text-xs text-fog hover:text-[#4a7ec3] border border-rim hover:border-[#4a7ec3]/30 rounded-lg px-3 py-1.5 transition-colors"
+          className="text-xs text-[#b4b4b4] hover:text-[#ececec] border border-[#3a3a3a] hover:border-[#555] rounded-lg px-2.5 py-1.5 transition-colors"
         >
           ⬡ Moltbook
         </Link>

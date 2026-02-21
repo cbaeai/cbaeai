@@ -1,49 +1,74 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #09090e; color: #eaeaf2; font-family: 'DM Sans', sans-serif; }
-::-webkit-scrollbar { width: 3px; }
+
+body {
+  background: #1a1a1a;
+  color: #ececec;
+  font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2e2e40; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #454545; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
 
 @keyframes msgIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
-.msg-in { animation: msgIn 0.3s cubic-bezier(0.16,1,0.3,1) both; }
+.msg-in { animation: msgIn 0.22s cubic-bezier(0.16,1,0.3,1) both; }
 
 @keyframes toolIn {
-  from { opacity: 0; transform: translateX(-6px); }
+  from { opacity: 0; transform: translateX(-4px); }
   to   { opacity: 1; transform: none; }
 }
-.tool-in { animation: toolIn 0.2s ease both; }
+.tool-in { animation: toolIn 0.18s ease both; }
 
-@keyframes pulse-dot {
+@keyframes pulseDot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
-.pulse-dot { animation: pulse-dot 1.2s ease infinite; }
+.pulse-dot { animation: pulseDot 1.4s ease infinite; }
 
-@keyframes spin-arc {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+@keyframes spinArc { to { transform: rotate(360deg); } }
+@keyframes spinArcInner { to { transform: rotate(-360deg); } }
+@keyframes thinkingFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
 }
-@keyframes spin-arc-inner {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(-360deg); }
-}
-@keyframes thinking-fade-in {
-  from { opacity: 0; transform: scale(0.92); }
-  to   { opacity: 1; transform: scale(1); }
-}
-.thinking-ring { animation: spin-arc 1.4s linear infinite; }
-.thinking-ring-inner { animation: spin-arc-inner 2.2s linear infinite; }
-.thinking-appear { animation: thinking-fade-in 0.25s cubic-bezier(0.16,1,0.3,1) both; }
+.thinking-ring { animation: spinArc 1.4s linear infinite; }
+.thinking-ring-inner { animation: spinArcInner 2.2s linear infinite; }
+.thinking-appear { animation: thinkingFade 0.2s ease both; }
 
-@keyframes pulse-glow {
+@keyframes pulseGlow {
   0%, 100% { opacity: 0.6; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.15); }
 }
+
+/* prose */
+.prose { color: #ececec; font-size: 15px; line-height: 1.72; }
+.prose p { margin-bottom: 0.85em; }
+.prose p:last-child { margin-bottom: 0; }
+.prose h1,.prose h2,.prose h3 { color: #ececec; font-weight: 600; margin: 1.1em 0 0.45em; line-height: 1.3; }
+.prose h1 { font-size: 1.2em; }
+.prose h2 { font-size: 1.08em; }
+.prose h3 { font-size: 1em; }
+.prose ul,.prose ol { padding-left: 1.5em; margin-bottom: 0.85em; }
+.prose li { margin-bottom: 0.2em; }
+.prose li::marker { color: #8e8e8e; }
+.prose code:not(pre code) { background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 0.15em 0.42em; font-size: 0.875em; font-family: ui-monospace,"SF Mono",monospace; color: #e8c77d; }
+.prose pre { background: #1e1e1e; border: 1px solid #333; border-radius: 10px; padding: 1em 1.2em; overflow-x: auto; margin-bottom: 0.85em; }
+.prose pre code { background: none; border: none; padding: 0; color: #ccc; font-size: 0.875em; }
+.prose blockquote { border-left: 3px solid #3a3a3a; padding-left: 1em; color: #8e8e8e; margin: 0.75em 0; }
+.prose a { color: #7eb8f7; text-decoration: underline; text-underline-offset: 2px; }
+.prose strong { font-weight: 600; }
+.prose table { width: 100%; border-collapse: collapse; margin-bottom: 0.85em; font-size: 0.9em; }
+.prose th { background: #252525; padding: 0.5em 0.8em; text-align: left; font-weight: 500; border: 1px solid #333; }
+.prose td { padding: 0.45em 0.8em; border: 1px solid #333; }
+.prose hr { border: none; border-top: 1px solid #333; margin: 1em 0; }
