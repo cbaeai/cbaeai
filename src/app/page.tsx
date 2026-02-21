@@ -9,76 +9,42 @@ import { useChatStore } from "@/lib/store"
 import { v4 as uuidv4 } from "uuid"
 import { Message } from "@/types"
 
+function initStore() {
+  const store = useChatStore.getState()
+  if (store.conversations.length === 0) {
+    store.newConversation()
+    store.addMessage({
+      id: uuidv4(),
+      role: "assistant",
+      timestamp: new Date(),
+      content: "Hello! I'm **Cbae** — your autonomous AI assistant.\n\nI can search the web, run calculations, check weather, save notes, and much more. What can I help you with?",
+    })
+  } else {
+    const active = store.conversations.find(c => c.id === store.activeId) || store.conversations[0]
+    if (active) {
+      useChatStore.setState({
+        activeId: active.id,
+        messages: active.messages,
+        model: active.model,
+        agentMode: active.agentMode,
+      })
+    }
+  }
+}
+
 export default function Home() {
   const { isLoading, sendMessage } = useChat()
-  const { conversations, activeId, newConversation } = useChatStore()
+  const { conversations, activeId } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [hydrated, setHydrated] = useState(false)
 
-  // Wait for zustand persist to rehydrate from localStorage
   useEffect(() => {
-    const unsub = useChatStore.persist.onFinishHydration(() => {
-      setHydrated(true)
-      const store = useChatStore.getState()
-      if (store.conversations.length === 0) {
-        // Fresh user — create welcome conversation
-        store.newConversation()
-        const welcome: Message = {
-          id: uuidv4(),
-          role: "assistant",
-          timestamp: new Date(),
-          content: "Hello! I'm **Cbae** — your autonomous AI assistant.\n\nI can search the web, run calculations, check weather, save notes, and much more. What can I help you with?",
-        }
-        store.addMessage(welcome)
-      } else {
-        // Returning user — restore messages for active conversation
-        const active = store.conversations.find(c => c.id === store.activeId)
-          || store.conversations[0]
-        if (active) {
-          useChatStore.setState({
-            activeId: active.id,
-            messages: active.messages,
-            model: active.model,
-            agentMode: active.agentMode,
-          })
-        }
-      }
-    })
-
-    // If already hydrated (fast load), trigger manually
-    if (useChatStore.persist.hasHydrated()) {
-      setHydrated(true)
-      const store = useChatStore.getState()
-      if (store.conversations.length === 0) {
-        store.newConversation()
-        const welcome: Message = {
-          id: uuidv4(),
-          role: "assistant",
-          timestamp: new Date(),
-          content: "Hello! I'm **Cbae** — your autonomous AI assistant.\n\nI can search the web, run calculations, check weather, save notes, and much more. What can I help you with?",
-        }
-        store.addMessage(welcome)
-      } else {
-        const active = store.conversations.find(c => c.id === store.activeId)
-          || store.conversations[0]
-        if (active) {
-          useChatStore.setState({
-            activeId: active.id,
-            messages: active.messages,
-            model: active.model,
-            agentMode: active.agentMode,
-          })
-        }
-      }
-    }
-
-    return () => unsub()
+    // Zustand persist rehydrates synchronously from localStorage in the browser.
+    // By the time useEffect runs, hasHydrated() is always true — just init directly.
+    initStore()
   }, [])
 
-  // Read messages directly from active conversation — single source of truth
-  const activeConvo = conversations.find(c => c.id === activeId)
-  const messages = activeConvo?.messages || []
+  const messages = conversations.find(c => c.id === activeId)?.messages || []
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -96,12 +62,7 @@ export default function Home() {
         <Header onOpenSidebar={() => setSidebarOpen(true)} />
 
         <div className="flex-1 overflow-y-auto py-4">
-          {!hydrated ? (
-            // Loading state while localStorage rehydrates
-            <div className="flex items-center justify-center h-full">
-              <div className="text-fog text-sm">Loading...</div>
-            </div>
-          ) : messages.length === 0 ? (
+          {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <p className="font-serif text-3xl text-text1 mb-2">Cbae</p>
