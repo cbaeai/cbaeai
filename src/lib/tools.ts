@@ -36,6 +36,21 @@ export const TOOLS: object[] = [
   {
     type: "function",
     function: {
+      name: "search_images",
+      description: "Search the web for images. Use this when the user asks to find, show, or search for images of something. Returns a grid of real image results from the web.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "What to search images for" },
+          count: { type: "number", description: "Number of images to return (default: 6, max: 9)" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "calculator",
       description: "Evaluate a mathematical expression and return the result.",
       parameters: {
@@ -72,23 +87,6 @@ export const TOOLS: object[] = [
           content: { type: "string", description: "The note content to save" },
         },
         required: ["content"],
-      },
-    },
-  },
-
-  // ── Image generation ──────────────────────────────────────────
-  {
-    type: "function",
-    function: {
-      name: "generate_image",
-      description: "Generate an image from a text prompt using AI. Use this when the user asks to create, draw, generate, or visualize anything. Returns a URL to the generated image.",
-      parameters: {
-        type: "object",
-        properties: {
-          prompt: { type: "string", description: "Detailed description of the image to generate" },
-          size:   { type: "string", enum: ["1024x1024", "1792x1024", "1024x1792"], description: "Image dimensions (default: 1024x1024)" },
-        },
-        required: ["prompt"],
       },
     },
   },
@@ -260,6 +258,31 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
   try {
     switch (tool) {
 
+      case "search_images": {
+        const query = encodeURIComponent(args.query || "")
+        const count = Math.min(args.count || 6, 9)
+        const res = await fetch(
+          `https://api.search.brave.com/res/v1/images/search?q=${query}&count=${count}&safesearch=moderate`,
+          {
+            headers: {
+              "Accept": "application/json",
+              "Accept-Encoding": "gzip",
+              "X-Subscription-Token": process.env.BRAVE_KEY || "",
+            },
+          }
+        )
+        const data = await res.json()
+        const results = data.results || []
+        if (!results.length) return `SEARCH_IMAGES_EMPTY:No images found for: "${args.query}"`
+        const images = results.slice(0, count).map((r: any) => ({
+          url: r.properties?.url || r.url || "",
+          thumbnail: r.thumbnail?.src || r.properties?.url || "",
+          title: r.title || "",
+          source: r.source || r.meta_url?.hostname || "",
+        }))
+        return `SEARCH_IMAGES:${JSON.stringify(images)}`
+      }
+
       case "web_search": {
         const query = encodeURIComponent(args.query || "")
         const res = await fetch(
@@ -333,36 +356,6 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
         return `✅ Note saved: "${content.slice(0, 100)}"`
       }
 
-
-      case "generate_image": {
-        const { prompt, size = "1024x1024" } = args
-        if (!prompt) return "A prompt is required to generate an image."
-
-        // DALL-E 3 requires the official OpenAI API — OpenRouter does not support image generation
-        const res = await fetch("https://api.openai.com/v1/images/generations", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.OPENAI_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "dall-e-3",
-            prompt,
-            n: 1,
-            size,
-            response_format: "url",
-          }),
-          signal: AbortSignal.timeout(60000),
-        })
-
-        const data = await res.json()
-        if (data.error) return `Image generation failed: ${data.error.message || JSON.stringify(data.error)}`
-        const url = data.data?.[0]?.url
-        if (!url) return `Image generation failed: no URL returned. Response: ${JSON.stringify(data).slice(0, 200)}`
-
-        // Return a special marker the frontend detects to render the image
-        return `IMAGE_GENERATED:${url}`
-      }
 
 
       case "run_code": {

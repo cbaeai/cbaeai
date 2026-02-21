@@ -7,25 +7,23 @@ export interface ToolCall {
 }
 
 // ── Attachment — covers images AND files ───────────────────────
-// Images go to the vision API path (base64 + mimeType).
-// Files go to the text injection path (extractedText).
-// A message can have at most one attachment.
 export interface Attachment {
   kind: "image" | "file"
+  name: string
+  mimeType: string
+  size: number
+  base64?: string
+  previewUrl?: string
+  extractedText?: string
+  fileCount?: number
+  language?: string
+}
 
-  // ── shared ──────────────────────────────────
-  name: string          // original filename, e.g. "report.pdf"
-  mimeType: string      // e.g. "application/pdf", "image/png"
-  size: number          // bytes
-
-  // ── image-only ──────────────────────────────
-  base64?: string       // raw base64 (no data: prefix) — sent to vision API
-  previewUrl?: string   // full data: URL — used for <img> display in chat
-
-  // ── file-only ───────────────────────────────
-  extractedText?: string  // text extracted from PDF / ZIP / code / etc.
-  fileCount?: number      // for ZIP: how many files were inside
-  language?: string       // for code: detected language, e.g. "typescript"
+export interface SearchImage {
+  url: string
+  title: string
+  source: string
+  thumbnail?: string
 }
 
 export interface Message {
@@ -36,8 +34,6 @@ export interface Message {
   toolCalls?: ToolCall[]
   isStreaming?: boolean
   timestamp: Date
-  attachment?: Attachment  // replaces the old `image` field
-  generatedImageUrl?: string  // image gen tool result
+  attachment?: Attachment
+  searchImages?: SearchImage[]  // web image search results
 }
-
-// Store type lives in src/lib/store.ts

@@ -1,7 +1,7 @@
 "use client"
 import { useState, useCallback } from "react"
 import { CbaeLogo } from "./CbaeLogo"
-import { Message } from "@/types"
+import { Message, SearchImage } from "@/types"
 import { MarkdownRenderer } from "./MarkdownRenderer"
 import { ToolCallBadge } from "./ToolCallBadge"
 
@@ -54,70 +54,70 @@ function ThinkingBlock({ thinking, isStreaming }: { thinking: string; isStreamin
   )
 }
 
-// ── Generated image with loading state ────────────────────────
-function GeneratedImage({ url }: { url: string }) {
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState(false)
-  const [fullscreen, setFullscreen] = useState(false)
+
+
+// ── Web image search results grid ────────────────────────────
+function SearchImageGrid({ images }: { images: Array<{ url: string; title: string; source: string; thumbnail?: string }> }) {
+  const [selected, setSelected] = useState<string | null>(null)
+  const [failed, setFailed] = useState<Set<string>>(new Set())
+
+  const validImages = images.filter(img => img.url && !failed.has(img.url))
 
   return (
     <>
-      <div className="mt-3 rounded-2xl overflow-hidden border border-rim2 max-w-sm">
-        {!loaded && !error && (
-          <div className="flex items-center justify-center h-48 bg-ink3">
-            <div className="flex flex-col items-center gap-2">
-              <svg className="animate-spin w-6 h-6 text-[#4a7ec3]" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3"/>
-                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              <span className="text-fog text-xs">Loading image…</span>
+      <div className="mt-3 grid grid-cols-3 gap-1.5 max-w-lg">
+        {validImages.slice(0, 9).map((img, i) => (
+          <div
+            key={i}
+            className="relative group cursor-zoom-in rounded-xl overflow-hidden border border-rim bg-ink3 aspect-square"
+            onClick={() => setSelected(img.url)}
+          >
+            <img
+              src={img.thumbnail || img.url}
+              alt={img.title}
+              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+              onError={() => setFailed(f => new Set([...f, img.url]))}
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end">
+              <p className="text-white text-[10px] px-2 py-1.5 truncate w-full opacity-0 group-hover:opacity-100 transition-opacity leading-tight">
+                {img.source}
+              </p>
             </div>
           </div>
-        )}
-        {error && (
-          <div className="flex items-center justify-center h-24 bg-ink3 text-fog text-xs">
-            Failed to load image
-          </div>
-        )}
-        <img
-          src={url}
-          alt="AI generated image"
-          className={`w-full object-cover cursor-zoom-in transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0 h-0"}`}
-          onLoad={() => setLoaded(true)}
-          onError={() => setError(true)}
-          onClick={() => setFullscreen(true)}
-        />
-        {loaded && (
-          <div className="flex items-center justify-between px-3 py-2 bg-ink3 border-t border-rim">
-            <span className="text-fog text-xs">AI generated</span>
+        ))}
+      </div>
+      {validImages.length > 0 && (
+        <p className="text-fog text-[11px] mt-1.5">{validImages.length} images · click to expand</p>
+      )}
+
+      {/* Lightbox */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setSelected(null)}
+        >
+          <img
+            src={selected}
+            alt=""
+            className="max-w-full max-h-[80vh] rounded-xl object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <div className="flex items-center gap-3 mt-4" onClick={e => e.stopPropagation()}>
             <a
-              href={url}
-              download="cbae-generated.png"
+              href={selected}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-[#4a7ec3] hover:text-[#6b9fd6] transition-colors flex items-center gap-1"
-              onClick={e => e.stopPropagation()}
+              className="text-xs text-[#7eb8f7] hover:underline"
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              Download
+              Open original ↗
             </a>
+            <button
+              onClick={() => setSelected(null)}
+              className="text-xs text-white/50 hover:text-white transition-colors"
+            >
+              Close ✕
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* Fullscreen lightbox */}
-      {fullscreen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
-          onClick={() => setFullscreen(false)}
-        >
-          <img src={url} alt="AI generated" className="max-w-full max-h-full rounded-xl object-contain" />
-          <button
-            onClick={() => setFullscreen(false)}
-            className="absolute top-4 right-4 text-white/60 hover:text-white text-2xl leading-none"
-          >✕</button>
         </div>
       )}
     </>
@@ -200,6 +200,11 @@ export function ChatMessage({
           </div>
         )}
 
+        {/* Image search results */}
+        {!isUser && msg.searchImages && msg.searchImages.length > 0 && (
+          <SearchImageGrid images={msg.searchImages} />
+        )}
+
         {/* Message bubble */}
         {(msg.content || msg.attachment) && (
           <div className={`rounded-2xl px-4 py-3 text-sm
@@ -246,10 +251,6 @@ export function ChatMessage({
           </div>
         )}
 
-        {/* Generated image */}
-        {!isUser && msg.generatedImageUrl && (
-          <GeneratedImage url={msg.generatedImageUrl} />
-        )}
 
         {/* Thinking indicator — while waiting for first token */}
         {msg.isStreaming && !msg.content && !msg.thinking && (

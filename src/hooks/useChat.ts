@@ -353,11 +353,11 @@ User question: ${text}`
                 return { messages: msgs, conversations: convos }
               })
             }
-            if (data.type === "image_generated") {
-              // Store the generated image URL on the current assistant message
+            if (data.type === "search_images") {
+              // Store image search results on the current assistant message
               useChatStore.setState(s => {
                 const msgs = [...s.messages]
-                msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], generatedImageUrl: data.url }
+                msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], searchImages: data.images }
                 const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
                 return { messages: msgs, conversations: convos }
               })
