@@ -169,13 +169,16 @@ export async function POST(req: NextRequest) {
               const args = JSON.parse(tc.function.arguments)
               send({ type: "tool_call", tool: tc.function.name, args })
               const result = await executeTool(tc.function.name, args)
-              // Detect image generation result — send special event for frontend to render
-              if (result.startsWith("IMAGE_GENERATED:")) {
-                const imageUrl = result.replace("IMAGE_GENERATED:", "")
-                send({ type: "image_generated", url: imageUrl })
-                // Tell the model the image was generated successfully
-                loop.push({ role: "tool", tool_call_id: tc.id, content: `Image generated successfully. URL: ${imageUrl}` } as any)
-                send({ type: "tool_result", tool: tc.function.name, result: "✅ Image generated" })
+              // Detect image search result — parse and send as a grid event for frontend
+              if (result.startsWith("SEARCH_IMAGES:")) {
+                const images = JSON.parse(result.replace("SEARCH_IMAGES:", ""))
+                send({ type: "search_images", images })
+                loop.push({ role: "tool", tool_call_id: tc.id, content: `Found ${images.length} images for display.` } as any)
+                send({ type: "tool_result", tool: tc.function.name, result: `✅ ${images.length} images found` })
+              } else if (result.startsWith("SEARCH_IMAGES_EMPTY:")) {
+                const msg = result.replace("SEARCH_IMAGES_EMPTY:", "")
+                send({ type: "tool_result", tool: tc.function.name, result: msg })
+                loop.push({ role: "tool", tool_call_id: tc.id, content: msg } as any)
               } else {
                 send({ type: "tool_result", tool: tc.function.name, result: result.slice(0, 400) })
                 loop.push({ role: "tool", tool_call_id: tc.id, content: result } as any)
