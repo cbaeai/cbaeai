@@ -306,7 +306,21 @@ User question: ${text}`
           if (!line.startsWith("data: ")) continue
           try {
             const data = JSON.parse(line.slice(6))
+            if (data.type === "thinking_token") {
+              // Accumulate thinking tokens live — update the store on each chunk
+              useChatStore.setState(s => {
+                const msgs = [...s.messages]
+                const last = msgs[msgs.length - 1]
+                const current = last.thinking || ""
+                msgs[msgs.length - 1] = { ...last, thinking: current + data.content }
+                return { messages: msgs }
+              })
+            }
+            if (data.type === "thinking_done") {
+              // Thinking stream complete — nothing extra needed, state already set
+            }
             if (data.type === "thinking") {
+              // Legacy single-shot thinking (fallback)
               setThinking(data.content)
             }
             if (data.type === "token") {

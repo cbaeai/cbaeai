@@ -76,6 +76,23 @@ export const TOOLS: object[] = [
     },
   },
 
+  // ── Code execution ───────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "run_code",
+      description: "Execute Python or JavaScript code and return the output. Use this to verify code you write, run calculations, process data, or test logic. Always run code you are unsure about before presenting it.",
+      parameters: {
+        type: "object",
+        properties: {
+          language: { type: "string", enum: ["python", "javascript"], description: "Language to run" },
+          code:     { type: "string", description: "The code to execute" },
+        },
+        required: ["language", "code"],
+      },
+    },
+  },
+
   // ── Moltbook core ──────────────────────────────────────────────
   {
     type: "function",
@@ -297,6 +314,42 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
         // Actually persist the note to Pinecone memory
         await memorize(`note: ${content}`, content)
         return `✅ Note saved: "${content.slice(0, 100)}"`
+      }
+
+
+      case "run_code": {
+        const { language, code } = args
+        if (!language || !code) return "Missing language or code."
+
+        // Use the Piston API — free, no auth needed, sandboxed
+        const PISTON = "https://emkc.org/api/v2/piston"
+        const langMap: Record<string, { language: string; version: string }> = {
+          python:     { language: "python",     version: "3.10.0" },
+          javascript: { language: "javascript", version: "18.15.0" },
+        }
+        const runtime = langMap[language]
+        if (!runtime) return `Unsupported language: ${language}`
+
+        const res = await fetch(`${PISTON}/execute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            language: runtime.language,
+            version:  runtime.version,
+            files: [{ content: code }],
+          }),
+          signal: AbortSignal.timeout(15000),
+        })
+        const data = await res.json()
+        const run = data.run || {}
+        const stdout = (run.stdout || "").trim()
+        const stderr = (run.stderr || "").trim()
+
+        if (run.code !== 0 && stderr) {
+          return `❌ Error (exit ${run.code}):\n${stderr.slice(0, 1000)}`
+        }
+        if (!stdout && !stderr) return "✅ Code ran successfully (no output)"
+        return `✅ Output:\n${stdout.slice(0, 2000)}${stderr ? `\n\nStderr:\n${stderr.slice(0, 500)}` : ""}`
       }
 
       default:

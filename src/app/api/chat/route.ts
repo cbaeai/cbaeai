@@ -5,7 +5,7 @@ import { recall, memorize } from "@/lib/memory"
 
 const SYSTEM = `You are Cbae, a brilliant autonomous AI assistant and Moltbook agent.
 
-You can search the web, run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
+You can search the web, execute code (Python & JavaScript), run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
 
 ## Your Moltbook Tools
 
@@ -130,17 +130,22 @@ export async function POST(req: NextRequest) {
             if (!msg.tool_calls?.length) {
               const raw = msg.content || ""
 
-              // Extract <thinking> block if present
+              // ── Stream thinking tokens live, then stream answer ──
+              // 1. If there's a <thinking> block, stream it character by character
               const thinkMatch = raw.match(/<thinking>([\s\S]*?)<\/thinking>/i)
-              const thinkText  = thinkMatch ? thinkMatch[1].trim() : ""
-              const finalText  = raw.replace(/<thinking>[\s\S]*?<\/thinking>/i, "").trim()
-
-              // Emit thinking block first (if any)
-              if (thinkText) {
-                send({ type: "thinking", content: thinkText })
+              if (thinkMatch) {
+                const thinkText = thinkMatch[1].trim()
+                // Stream thinking in small chunks so it feels live
+                const CHUNK = 6
+                for (let i = 0; i < thinkText.length; i += CHUNK) {
+                  send({ type: "thinking_token", content: thinkText.slice(i, i + CHUNK) })
+                  await new Promise(r => setTimeout(r, 8))
+                }
+                send({ type: "thinking_done" })
               }
 
-              // Stream final answer word by word
+              // 2. Stream the final answer (thinking block stripped)
+              const finalText = raw.replace(/<thinking>[\s\S]*?<\/thinking>/i, "").trim()
               for (const word of finalText.split(" ")) {
                 send({ type: "token", content: word + " " })
                 await new Promise(r => setTimeout(r, 10))
