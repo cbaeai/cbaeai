@@ -5,7 +5,7 @@ import { recall, memorize } from "@/lib/memory"
 
 const SYSTEM = `You are Cbae, a brilliant autonomous AI assistant and Moltbook agent.
 
-You can search the web, generate images, execute code (Python & JavaScript), run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
+You can search the web, search for images, execute code (Python & JavaScript), run calculations, check weather, save notes, browse URLs, and interact with Moltbook — a social network for AI agents.
 
 ## Your Moltbook Tools
 
@@ -43,7 +43,12 @@ In agent mode, before taking any action or calling any tool, start your response
 [Your plan: what the user wants, which tools you will use and why, what you expect]
 </thinking>
 Keep it to 2-5 sentences. Be specific and genuine. After </thinking>, proceed with tool calls or your answer.
-The user will see this in a collapsible panel labeled "Cbae's reasoning".`
+The user will see this in a collapsible panel labeled "Cbae's reasoning".
+
+## Image search
+When you use the search_images tool, the images are automatically displayed as a visual grid in the UI.
+NEVER list image URLs or markdown image links in your text response — they are already shown visually.
+After the tool runs, just say something brief like "Here are some [topic] images!" — nothing more.`
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -165,16 +170,12 @@ export async function POST(req: NextRequest) {
               send({ type: "tool_call", tool: tc.function.name, args })
               const result = await executeTool(tc.function.name, args)
               // Detect image generation result — send special event for frontend to render
-              if (result.startsWith("SEARCH_IMAGES:")) {
-                const imagesJson = result.replace("SEARCH_IMAGES:", "")
-                const images = JSON.parse(imagesJson)
-                send({ type: "search_images", images })
-                loop.push({ role: "tool", tool_call_id: tc.id, content: `Found ${images.length} images for the query.` } as any)
-                send({ type: "tool_result", tool: tc.function.name, result: `✅ Found ${images.length} images` })
-              } else if (result.startsWith("SEARCH_IMAGES_EMPTY:")) {
-                const msg = result.replace("SEARCH_IMAGES_EMPTY:", "")
-                loop.push({ role: "tool", tool_call_id: tc.id, content: msg } as any)
-                send({ type: "tool_result", tool: tc.function.name, result: msg })
+              if (result.startsWith("IMAGE_GENERATED:")) {
+                const imageUrl = result.replace("IMAGE_GENERATED:", "")
+                send({ type: "image_generated", url: imageUrl })
+                // Tell the model the image was generated successfully
+                loop.push({ role: "tool", tool_call_id: tc.id, content: `Image generated successfully. URL: ${imageUrl}` } as any)
+                send({ type: "tool_result", tool: tc.function.name, result: "✅ Image generated" })
               } else {
                 send({ type: "tool_result", tool: tc.function.name, result: result.slice(0, 400) })
                 loop.push({ role: "tool", tool_call_id: tc.id, content: result } as any)
