@@ -2,7 +2,7 @@
 import { useChatStore } from "@/lib/store"
 import { Message } from "@/types"
 import { v4 as uuidv4 } from "uuid"
-import type { AttachedImage } from "@/components/ChatInput"
+import type { Attachment } from "@/types"
 
 const MB = "https://www.moltbook.com/api/v1"
 
@@ -194,21 +194,21 @@ export function useChat() {
 
   const sendMessage = async (
     text: string,
-    imageOrResume?: AttachedImage | {
+    attachOrResume?: Attachment | {
       tool_results: Array<{ tool_call_id: string; tool: string; result: string }>
       loop_messages: any[]
     }
   ) => {
-    // Distinguish between an image attachment and a resume payload
-    const isResume = imageOrResume && "tool_results" in imageOrResume
-    const _resumePayload = isResume ? imageOrResume : undefined
-    const attachedImage  = (!isResume && imageOrResume) ? imageOrResume as AttachedImage : undefined
+    // Distinguish between an attachment and a resume payload (from Moltbook tool loop)
+    const isResume = attachOrResume && "tool_results" in attachOrResume
+    const _resumePayload = isResume ? attachOrResume : undefined
+    const attachment = (!isResume && attachOrResume) ? attachOrResume as Attachment : undefined
 
     if (!_resumePayload && (!text.trim() || isLoading)) return
 
     if (!_resumePayload) {
-      // Store the image on the user message so it appears in chat history
-      addMessage({ id: uuidv4(), role: "user", content: text, timestamp: new Date(), image: attachedImage })
+      // Store the attachment on the user message so it appears in chat history
+      addMessage({ id: uuidv4(), role: "user", content: text, timestamp: new Date(), attachment })
       addMessage({ id: uuidv4(), role: "assistant", content: "", isStreaming: true, toolCalls: [], timestamp: new Date() })
       setLoading(true)
     }
@@ -221,16 +221,24 @@ export function useChat() {
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }))
 
-      // Vision models: if the user attached an image but the current model isn't vision-capable,
-      // silently upgrade to gpt-4o for this request only
+      // Vision: if image attached + non-vision model → silently upgrade to gpt-4o for this call only
       const VISION_MODELS = new Set(["openai/gpt-4o", "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", "google/gemini-pro-1.5"])
-      const requestModel = attachedImage && !VISION_MODELS.has(model) ? "openai/gpt-4o" : model
+      const isImage = attachment?.kind === "image"
+      const requestModel = isImage && !VISION_MODELS.has(model) ? "openai/gpt-4o" : model
 
       const body: any = { message: text, history, agent_mode: agentMode, model: requestModel, mb_key }
-      // Pass the image as base64 + mimeType so the API route can build the correct content block
-      if (attachedImage) {
-        body.image_base64 = attachedImage.base64
-        body.image_mime   = attachedImage.mimeType
+
+      if (attachment?.kind === "image") {
+        // Image → send as base64 vision block to the API
+        body.image_base64 = attachment.base64
+        body.image_mime   = attachment.mimeType
+      } else if (attachment?.kind === "file" && attachment.extractedText) {
+        // File (PDF / ZIP / code) → inject extracted text directly into the message
+        // We prepend it so Cbae sees the file content before the user's question
+        body.message = `${attachment.extractedText}
+
+---
+User question: ${text}`
       }
       if (_resumePayload) {
         body.tool_results = _resumePayload.tool_results

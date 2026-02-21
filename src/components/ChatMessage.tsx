@@ -118,21 +118,38 @@ export function ChatMessage({ msg }: { msg: Message }) {
         )}
 
         {/* Message bubble */}
-        {(msg.content || msg.image) && (
+        {(msg.content || msg.attachment) && (
           <div className={`rounded-2xl px-4 py-3 text-sm
             ${isUser
               ? "bg-ink3 border border-rim2 text-text1 rounded-tr-sm"
               : "text-text1 rounded-tl-sm"
             }`}
           >
-            {/* Image thumbnail — shown above text in user messages */}
-            {msg.image && (
+            {/* Attachment preview — image thumbnail or file badge */}
+            {msg.attachment && (
               <div className="mb-2">
-                <img
-                  src={msg.image.previewUrl}
-                  alt="Attached image"
-                  className="max-w-xs max-h-48 rounded-xl object-cover border border-rim2"
-                />
+                {msg.attachment.kind === "image" && msg.attachment.previewUrl ? (
+                  <img
+                    src={msg.attachment.previewUrl}
+                    alt="Attached image"
+                    className="max-w-xs max-h-48 rounded-xl object-cover border border-rim2"
+                  />
+                ) : (
+                  <div className="inline-flex items-center gap-2 bg-ink3 border border-rim2 rounded-xl px-3 py-2">
+                    <span className="text-lg">{
+                      msg.attachment.name.endsWith(".pdf") ? "📄" :
+                      msg.attachment.name.endsWith(".zip") ? "🗜️" : "📁"
+                    }</span>
+                    <div>
+                      <p className="text-text2 text-xs font-medium">{msg.attachment.name}</p>
+                      <p className="text-fog text-xs">
+                        {msg.attachment.fileCount !== undefined
+                          ? `${msg.attachment.fileCount} files`
+                          : msg.attachment.language || "text extracted"}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {isUser ? (
