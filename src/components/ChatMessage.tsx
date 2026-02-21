@@ -62,11 +62,12 @@ function SearchImageGrid({ images }: { images: Array<{ url: string; title: strin
   const [failed, setFailed] = useState<Set<string>>(new Set())
 
   const validImages = images.filter(img => img.url && !failed.has(img.url))
+  const display = validImages.slice(0, 3)
 
   return (
     <>
-      <div className="mt-3 grid grid-cols-3 gap-1.5 max-w-lg">
-        {validImages.slice(0, 9).map((img, i) => (
+      <div className="mt-3 grid grid-cols-3 gap-1.5 max-w-md">
+        {display.map((img, i) => (
           <div
             key={i}
             className="relative group cursor-zoom-in rounded-xl overflow-hidden border border-rim bg-ink3 aspect-square"
@@ -78,16 +79,12 @@ function SearchImageGrid({ images }: { images: Array<{ url: string; title: strin
               className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
               onError={() => setFailed(f => { const s = new Set(f); s.add(img.url); return s })}
             />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end">
-              <p className="text-white text-[10px] px-2 py-1.5 truncate w-full opacity-0 group-hover:opacity-100 transition-opacity leading-tight">
-                {img.source}
-              </p>
-            </div>
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
           </div>
         ))}
       </div>
-      {validImages.length > 0 && (
-        <p className="text-fog text-[11px] mt-1.5">{validImages.length} images · click to expand</p>
+      {display.length > 0 && (
+        <p className="text-fog text-[11px] mt-1.5">Click to expand</p>
       )}
 
       {/* Lightbox */}
