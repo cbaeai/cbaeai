@@ -63,20 +63,22 @@ export const useChatStore = create<ConversationStore>()(
       newConversation: () => {
         const { model, agentMode } = get()
         const convo = makeNew(model, agentMode)
-        set(s => ({ conversations: [convo, ...s.conversations], activeId: convo.id }))
+        set(s => ({ conversations: [convo, ...s.conversations], activeId: convo.id, messages: [] }))
         return convo.id
       },
 
       switchConversation: (id) => {
         const convo = get().conversations.find(c => c.id === id)
         if (!convo) return
-        set({ activeId: id, model: convo.model, agentMode: convo.agentMode })
+        set({ activeId: id, model: convo.model, agentMode: convo.agentMode, messages: convo.messages })
       },
 
       deleteConversation: (id) => {
         const { conversations, activeId } = get()
         const remaining = conversations.filter(c => c.id !== id)
-        set({ conversations: remaining, activeId: activeId === id ? (remaining[0]?.id || null) : activeId })
+        const newActiveId = activeId === id ? (remaining[0]?.id || null) : activeId
+        const newMsgs = remaining.find(c => c.id === newActiveId)?.messages || []
+        set({ conversations: remaining, activeId: newActiveId, messages: newMsgs })
       },
 
       renameConversation: (id, title) =>
@@ -98,23 +100,26 @@ export const useChatStore = create<ConversationStore>()(
               : c.title
             return { ...c, messages, title, updatedAt: new Date().toISOString() }
           })
-          return { conversations: updated, activeId }
+          const newMsgs = updated.find(c => c.id === activeId)?.messages || []
+          return { conversations: updated, activeId, messages: newMsgs }
         })
       },
 
       updateLastMessage: (content) =>
-        set(s => ({
-          conversations: s.conversations.map(c => {
+        set(s => {
+          const updated = s.conversations.map(c => {
             if (c.id !== s.activeId) return c
             const msgs = [...c.messages]
             if (msgs.length > 0) msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content, isStreaming: false }
             return { ...c, messages: msgs }
           })
-        })),
+          const newMsgs = updated.find(c => c.id === s.activeId)?.messages || []
+          return { conversations: updated, messages: newMsgs }
+        }),
 
       appendToolCall: (tc: ToolCall) =>
-        set(s => ({
-          conversations: s.conversations.map(c => {
+        set(s => {
+          const updated = s.conversations.map(c => {
             if (c.id !== s.activeId) return c
             const msgs = [...c.messages]
             if (msgs.length > 0) {
@@ -123,7 +128,9 @@ export const useChatStore = create<ConversationStore>()(
             }
             return { ...c, messages: msgs }
           })
-        })),
+          const newMsgs = updated.find(c => c.id === s.activeId)?.messages || []
+          return { conversations: updated, messages: newMsgs }
+        }),
 
       setLoading: (v) => set({ isLoading: v }),
 
@@ -145,7 +152,8 @@ export const useChatStore = create<ConversationStore>()(
             c.id === s.activeId
               ? { ...c, messages: [], title: "New conversation", updatedAt: new Date().toISOString() }
               : c
-          )
+          ),
+          messages: [],
         })),
     }),
     {
@@ -158,7 +166,14 @@ export const useChatStore = create<ConversationStore>()(
         activeId:  state.activeId,
         model:     state.model,
         agentMode: state.agentMode,
+        // messages is derived — not persisted, rehydrated on load
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          const active = state.conversations.find(c => c.id === state.activeId)
+          state.messages = active?.messages || []
+        }
+      },
     }
   )
 )

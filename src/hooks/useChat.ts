@@ -261,12 +261,18 @@ User question: ${text}`
       let rawAccum = ""   // accumulates all tokens to do a final clean pass
 
       const setThinking = (t: string) => useChatStore.setState(s => {
-        const msgs = [...s.messages]; msgs[msgs.length-1] = {...msgs[msgs.length-1], thinking: t}; return {messages: msgs}
+        const msgs = [...s.messages]
+        msgs[msgs.length-1] = {...msgs[msgs.length-1], thinking: t}
+        const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+        return {messages: msgs, conversations: convos}
       })
       const setContent = (t: string) => {
         fullText = t
         useChatStore.setState(s => {
-          const msgs = [...s.messages]; msgs[msgs.length-1] = {...msgs[msgs.length-1], content: t}; return {messages: msgs}
+          const msgs = [...s.messages]
+          msgs[msgs.length-1] = {...msgs[msgs.length-1], content: t}
+          const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+          return {messages: msgs, conversations: convos}
         })
       }
 
@@ -307,13 +313,12 @@ User question: ${text}`
           try {
             const data = JSON.parse(line.slice(6))
             if (data.type === "thinking_token") {
-              // Accumulate thinking tokens live — update the store on each chunk
               useChatStore.setState(s => {
                 const msgs = [...s.messages]
                 const last = msgs[msgs.length - 1]
-                const current = last.thinking || ""
-                msgs[msgs.length - 1] = { ...last, thinking: current + data.content }
-                return { messages: msgs }
+                msgs[msgs.length - 1] = { ...last, thinking: (last.thinking || "") + data.content }
+                const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+                return { messages: msgs, conversations: convos }
               })
             }
             if (data.type === "thinking_done") {
@@ -344,7 +349,8 @@ User question: ${text}`
                 const idx = tcs.findLastIndex(t => t.tool === data.tool && !t.result)
                 if (idx >= 0) tcs[idx] = { ...tcs[idx], result: data.result }
                 msgs[msgs.length - 1] = { ...last, toolCalls: tcs }
-                return { messages: msgs }
+                const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+                return { messages: msgs, conversations: convos }
               })
             }
             if (data.type === "client_execute") {
@@ -354,7 +360,8 @@ User question: ${text}`
               useChatStore.setState(s => {
                 const msgs = [...s.messages]
                 msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], isStreaming: false }
-                return { messages: msgs }
+                const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+                return { messages: msgs, conversations: convos }
               })
             }
           } catch { /* ignore parse errors */ }
@@ -369,7 +376,8 @@ User question: ${text}`
         useChatStore.setState(s => {
           const msgs = [...s.messages]
           msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], isStreaming: true }
-          return { messages: msgs }
+          const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+          return { messages: msgs, conversations: convos }
         })
 
         for (const tc of tool_calls) {
@@ -382,7 +390,8 @@ User question: ${text}`
             const idx = tcs.findLastIndex(t => t.tool === tc.tool && !t.result)
             if (idx >= 0) tcs[idx] = { ...tcs[idx], result: result.slice(0, 400) }
             msgs[msgs.length - 1] = { ...last, toolCalls: tcs }
-            return { messages: msgs }
+            const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+            return { messages: msgs, conversations: convos }
           })
         }
 
@@ -399,7 +408,8 @@ User question: ${text}`
           content: `Error: ${err instanceof Error ? err.message : "Something went wrong"}`,
           isStreaming: false,
         }
-        return { messages: msgs }
+        const convos = s.conversations.map(c => c.id === s.activeId ? {...c, messages: msgs} : c)
+        return { messages: msgs, conversations: convos }
       })
     } finally {
       if (!clientExecuteData) setLoading(false)
