@@ -69,6 +69,8 @@ export async function POST(req: NextRequest) {
     mb_key = "",
     tool_results = [] as Array<{ tool_call_id: string; tool: string; result: string }>,
     loop_messages = null as any[] | null,
+    image_base64 = "" as string,
+    image_mime   = "image/png" as string,
   } = await req.json()
 
   const client = new OpenAI({
@@ -95,10 +97,26 @@ export async function POST(req: NextRequest) {
               loop.push({ role: "tool", tool_call_id: tr.tool_call_id, content: tr.result })
             }
           } else {
+            // If an image was attached, build the multimodal content block.
+            // OpenAI vision format: content is an array of parts.
+            // We send the image as base64 using the "image_url" type with a data: URI.
+            const userContent = image_base64
+              ? [
+                  {
+                    type: "image_url" as const,
+                    image_url: {
+                      url: `data:${image_mime};base64,${image_base64}`,
+                      detail: "auto",   // "auto" lets the model pick low/high detail
+                    },
+                  },
+                  { type: "text" as const, text: message || "What's in this image?" },
+                ]
+              : message   // plain string for text-only messages (cheaper + faster)
+
             loop = [
               { role: "system", content: system },
               ...history,
-              { role: "user", content: message },
+              { role: "user", content: userContent },
             ]
           }
 
@@ -164,10 +182,20 @@ export async function POST(req: NextRequest) {
             }
           }
         } else {
+          const userContentDirect = image_base64
+            ? [
+                {
+                  type: "image_url" as const,
+                  image_url: { url: `data:${image_mime};base64,${image_base64}`, detail: "auto" },
+                },
+                { type: "text" as const, text: message || "What's in this image?" },
+              ]
+            : message
+
           const messages = [
             { role: "system" as const, content: system },
             ...history,
-            { role: "user" as const, content: message },
+            { role: "user" as const, content: userContentDirect },
           ]
           const res = await client.chat.completions.create({
             model, messages, stream: true, temperature: 0.75, max_tokens: 4096,

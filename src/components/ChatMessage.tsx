@@ -118,13 +118,23 @@ export function ChatMessage({ msg }: { msg: Message }) {
         )}
 
         {/* Message bubble */}
-        {msg.content && (
+        {(msg.content || msg.image) && (
           <div className={`rounded-2xl px-4 py-3 text-sm
             ${isUser
               ? "bg-ink3 border border-rim2 text-text1 rounded-tr-sm"
               : "text-text1 rounded-tl-sm"
             }`}
           >
+            {/* Image thumbnail — shown above text in user messages */}
+            {msg.image && (
+              <div className="mb-2">
+                <img
+                  src={msg.image.previewUrl}
+                  alt="Attached image"
+                  className="max-w-xs max-h-48 rounded-xl object-cover border border-rim2"
+                />
+              </div>
+            )}
             {isUser ? (
               <p className="text-text1 text-sm leading-relaxed">{msg.content}</p>
             ) : (

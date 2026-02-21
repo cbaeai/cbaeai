@@ -14,6 +14,11 @@ export interface Message {
   toolCalls?: ToolCall[]
   isStreaming?: boolean
   timestamp: Date
+  image?: {               // optional attached image
+    base64: string        // raw base64 data (no data: prefix)
+    mimeType: string      // e.g. "image/png"
+    previewUrl: string    // data: URL for <img> display
+  }
 }
 
 export interface ChatStore {
