@@ -338,15 +338,15 @@ export async function executeTool(tool: string, args: Record<string, any>): Prom
         const { prompt, size = "1024x1024" } = args
         if (!prompt) return "A prompt is required to generate an image."
 
-        // Use OpenRouter with DALL-E 3
-        const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
+        // DALL-E 3 requires the official OpenAI API — OpenRouter does not support image generation
+        const res = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+            "Authorization": `Bearer ${process.env.OPENAI_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "openai/dall-e-3",
+            model: "dall-e-3",
             prompt,
             n: 1,
             size,
